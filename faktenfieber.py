@@ -1417,42 +1417,66 @@ def instagram_caption(daten):
     return "\n".join(teile)[:2150]
 
 
+def _temp_litterbox(video):
+    with open(video, "rb") as f:
+        r = requests.post("https://litterbox.catbox.moe/resources/internals/api.php", timeout=300,
+                          data={"reqtype": "fileupload", "time": "12h"},
+                          files={"fileToUpload": ("faktenfieber.mp4", f, "video/mp4")})
+    url = r.text.strip()
+    return url if r.status_code == 200 and url.startswith("https://") else None
+
+
+def _temp_tmpfiles(video):
+    with open(video, "rb") as f:
+        r = requests.post("https://tmpfiles.org/api/v1/upload", timeout=300,
+                          files={"file": ("faktenfieber.mp4", f, "video/mp4")})
+    url = (r.json().get("data") or {}).get("url", "") if r.status_code == 200 else ""
+    return url.replace("tmpfiles.org/", "tmpfiles.org/dl/", 1).replace("http://", "https://") or None
+
+
 def instagram_hochladen(video, daten):
-    """Reel hochladen: Container anlegen -> Datei hochladen -> warten bis verarbeitet -> veroeffentlichen."""
+    """Reel hochladen. Instagram holt sich das Video selbst von einer oeffentlichen URL ab,
+    deshalb liegt es kurz (max. 12 h) bei einem Temp-Datei-Dienst."""
     if not (IG_TOKEN and IG_USER):
         raise RuntimeError("Instagram-Secrets fehlen (IG_ACCESS_TOKEN, IG_USER_ID)")
-    r = requests.post(f"{IG_API}/{IG_USER}/media", timeout=60, data={
-        "media_type": "REELS", "upload_type": "resumable", "caption": instagram_caption(daten),
-        "share_to_feed": "true", "access_token": IG_TOKEN})
-    if r.status_code != 200 or "id" not in r.json():
-        raise RuntimeError(f"Instagram-Container fehlgeschlagen: {r.status_code} {r.text[:400]}")
-    container = r.json()["id"]
-    upload_url = r.json().get("uri") or f"https://rupload.facebook.com/ig-api-upload/{container}"
-    groesse = Path(video).stat().st_size
-    with open(video, "rb") as f:
-        r = requests.post(upload_url, data=f, timeout=600, headers={
-            "Authorization": f"OAuth {IG_TOKEN}", "offset": "0", "file_size": str(groesse)})
-    if r.status_code != 200:
-        raise RuntimeError(f"Instagram-Datei-Upload fehlgeschlagen: {r.status_code} {r.text[:400]}")
-    for _ in range(40):                          # bis zu ~10 Minuten auf die Verarbeitung warten
-        time.sleep(15)
-        st = requests.get(f"{IG_API}/{container}", timeout=30,
-                          params={"fields": "status_code,status", "access_token": IG_TOKEN}).json()
-        if st.get("status_code") == "FINISHED":
-            break
-        if st.get("status_code") in ("ERROR", "EXPIRED"):
-            raise RuntimeError(f"Instagram-Verarbeitung fehlgeschlagen: {st}")
-    else:
-        raise RuntimeError("Instagram-Verarbeitung dauert zu lange")
-    r = requests.post(f"{IG_API}/{IG_USER}/media_publish", timeout=60,
-                      data={"creation_id": container, "access_token": IG_TOKEN})
-    if r.status_code != 200:
-        raise RuntimeError(f"Instagram-Veroeffentlichung fehlgeschlagen: {r.status_code} {r.text[:400]}")
-    media = r.json()["id"]
-    link = requests.get(f"{IG_API}/{media}", timeout=30,
-                        params={"fields": "permalink", "access_token": IG_TOKEN}).json().get("permalink", "")
-    log(f"Instagram-Upload ok: {link or media}")
-    return link or media
+    fehler = []
+    for name, hoster in (("litterbox", _temp_litterbox), ("tmpfiles", _temp_tmpfiles)):
+        try:
+            video_url = hoster(video)
+        except Exception as e:
+            fehler.append(f"{name}: {e.__class__.__name__}")
+            continue
+        if not video_url:
+            fehler.append(f"{name}: keine URL")
+            continue
+        log(f"Video kurz bereitgestellt ({name}) – Instagram holt es ab ...")
+        r = requests.post(f"{IG_API}/{IG_USER}/media", timeout=60, data={
+            "media_type": "REELS", "video_url": video_url, "caption": instagram_caption(daten),
+            "share_to_feed": "true", "access_token": IG_TOKEN})
+        if r.status_code != 200 or "id" not in r.json():
+            raise RuntimeError(f"Instagram-Container fehlgeschlagen: {r.status_code} {r.text[:400]}")
+        container = r.json()["id"]
+        status = {}
+        for _ in range(40):                      # bis zu ~10 Minuten auf die Verarbeitung warten
+            time.sleep(15)
+            status = requests.get(f"{IG_API}/{container}", timeout=30,
+                                  params={"fields": "status_code,status", "access_token": IG_TOKEN}).json()
+            if status.get("status_code") in ("FINISHED", "ERROR", "EXPIRED"):
+                break
+        if status.get("status_code") != "FINISHED":
+            fehler.append(f"{name}: Instagram-Verarbeitung {status}")
+            log(f"Instagram konnte das Video von {name} nicht verarbeiten: {status}")
+            continue
+        r = requests.post(f"{IG_API}/{IG_USER}/media_publish", timeout=60,
+                          data={"creation_id": container, "access_token": IG_TOKEN})
+        if r.status_code != 200:
+            raise RuntimeError(f"Instagram-Veroeffentlichung fehlgeschlagen: {r.status_code} {r.text[:400]}")
+        media = r.json()["id"]
+        link = requests.get(f"{IG_API}/{media}", timeout=30,
+                            params={"fields": "permalink", "access_token": IG_TOKEN}).json().get("permalink", "")
+        log(f"Instagram-Upload ok: {link or media}")
+        return link or media
+    raise RuntimeError("Instagram-Upload fehlgeschlagen: " + " | ".join(fehler))
 
 
 # ---------------------------------------------------------------- Main
