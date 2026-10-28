@@ -28,6 +28,7 @@ USED_FILE = ROOT / "data" / "used_topics.json"
 
 W, H, FPS = 1080, 1920, 30
 MAX_DAUER = 58.0                       # Sekunden, Shorts bleiben unter 60
+MAX_SEGMENT = float(os.environ.get("SCHNITT_SEKUNDEN", "3.0"))   # spaetestens alle X s ein neues Bild
 VOICE_NAME = os.environ.get("PIPER_VOICE", "de_DE-thorsten-high")
 LENGTH_SCALE = float(os.environ.get("VOICE_SPEED", "0.92"))   # <1 = schneller
 FONT = "DejaVu Sans"
@@ -240,6 +241,49 @@ def wiki_artikel(titel):
     return seite["title"], text[:7000], seite.get("fullurl", f"https://de.wikipedia.org/wiki/{titel}")
 
 
+FREIE_LIZENZEN = ("cc0", "cc by", "cc-by", "public domain", "pd", "gemeinfrei", "no restrictions")
+BILD_AUSSCHLUSS = re.compile(r"(icon|logo|flag|flagge|wappen|coat.of.arms|karte|map|locator|symbol|signatur|"
+                             r"signature|unterschrift|commons-logo|wiktionary|wikidata|disambig|stub|pictogram|"
+                             r"diagram|diagramm|grafik|chart|\.svg$|\.gif$|\.tif)", re.I)
+
+
+def wiki_bilder(titel, maximal=12):
+    """Bilder aus dem Artikel (Wikimedia Commons) mit freier Lizenz + Urheberangabe."""
+    try:
+        daten = wiki(prop="images", titles=titel, imlimit=50, redirects=1)
+        dateien = [i["title"] for i in daten["query"]["pages"][0].get("images", [])
+                   if not BILD_AUSSCHLUSS.search(i["title"])]
+        if not dateien:
+            return []
+        info = wiki(prop="imageinfo", titles="|".join(dateien[:40]), iiprop="url|size|mime|extmetadata",
+                    iiurlwidth=1600, iiextmetadatalanguage="de")
+    except Exception as e:
+        log(f"Wiki-Bilder nicht ladbar: {e}")
+        return []
+    bilder = []
+    for seite in info["query"]["pages"]:
+        ii = (seite.get("imageinfo") or [{}])[0]
+        meta = ii.get("extmetadata", {})
+        lizenz = meta.get("LicenseShortName", {}).get("value", "")
+        if ii.get("mime") not in ("image/jpeg", "image/png") or min(ii.get("width", 0), ii.get("height", 0)) < 450:
+            continue
+        if not any(l in lizenz.lower() for l in FREIE_LIZENZEN):
+            continue
+        ohne_html = lambda t: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", t or "")).strip()
+        bilder.append({
+            "datei": seite["title"],
+            "url": ii.get("thumburl") or ii.get("url"),
+            "beschreibung": ohne_html(meta.get("ImageDescription", {}).get("value", ""))[:160]
+                            or seite["title"].split(":", 1)[-1].rsplit(".", 1)[0],
+            "urheber": ohne_html(meta.get("Artist", {}).get("value", "")) or "unbekannt",
+            "lizenz": lizenz,
+        })
+        if len(bilder) >= maximal:
+            break
+    log(f"{len(bilder)} passende Bilder aus dem Artikel gefunden")
+    return bilder
+
+
 # ================================================================ Thema + Skript
 def lade_benutzte():
     if USED_FILE.exists():
@@ -278,6 +322,8 @@ Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Sat
 
 def skript_erstellen(titel):
     titel, artikel, url = wiki_artikel(titel)
+    bilder = wiki_bilder(titel)
+    bildliste = "\n".join(f"{i}: {b['beschreibung']}" for i, b in enumerate(bilder)) or "(keine Bilder vorhanden)"
     prompt = f"""Du bist Autor des deutschen Faceless-Kanals FAKTENFIEBER (YouTube Shorts + Instagram Reels).
 Schreibe ein Short ueber den folgenden Wikipedia-Artikel.
 
@@ -287,14 +333,24 @@ nichts aus deinem eigenen Wissen ergaenzen, nicht uebertreiben, keine Zahlen run
 ARTIKEL "{titel}":
 \"\"\"{artikel}\"\"\"
 
+ECHTE BILDER AUS DEM ARTIKEL (Nummer: Beschreibung):
+{bildliste}
+
 STIL:
-- 90 bis 125 Woerter gesprochener Text (ca. 40-55 Sekunden).
+- 110 bis 140 Woerter gesprochener Text (ca. 45-55 Sekunden).
 - Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook mit dem ueberraschendsten Detail.
-- Aufbau: Hook -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
+- GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
+  und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
+  Roter Faden, jeder Satz baut auf dem vorherigen auf, nichts Unverstaendliches, keine Fachbegriffe ohne Erklaerung.
+- Aufbau: Hook -> Einordnung (was/wo/wann) -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
 - Kurze, lebendige Saetze, Du-Ansprache, locker aber nicht cringe. Keine Emojis, keine Klammern,
   keine Abkuerzungen, keine Sonderzeichen. Der Text wird von einer Computerstimme vorgelesen.
-- 5 bis 8 Szenen. Jede Szene: 1-2 Saetze + englischer Stock-Video-Suchbegriff (2-3 Woerter, konkret
-  und bildhaft, z. B. "old steam train", "foggy forest night").
+- 9 bis 13 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
+- Pro Szene das passende Bild:
+  "bild": Nummer eines ECHTEN Bildes aus der Liste oben, wenn es genau zu diesem Satz passt (sonst null).
+          Nutze die echten Bilder moeglichst oft, vor allem fuer das Hauptthema und den Hook.
+  "suchbegriff_en": IMMER angeben: englischer Stock-Video-Suchbegriff (2-3 Woerter), der GENAU zeigt,
+          worum es in diesem Satz geht (konkret, bildhaft, z. B. "gas tank explosion", "dragonfly closeup").
 - Jede Faktenbehauptung einzeln auflisten, mit "beleg" = exaktes, woertliches Zitat (5-25 Woerter)
   aus dem Artikeltext, das die Behauptung belegt. Copy-Paste, kein Umformulieren!
 - Titel, Beschreibung und Hashtags fuer YouTube/Instagram selbst erstellen.
@@ -303,7 +359,7 @@ Antworte NUR mit JSON:
 {{
   "thema": "{titel}",
   "titel": "YouTube-Titel, max. 60 Zeichen, macht neugierig, keine Clickbait-Luege",
-  "szenen": [{{"text": "...", "suchbegriff_en": "..."}}],
+  "szenen": [{{"text": "...", "bild": null, "suchbegriff_en": "..."}}],
   "behauptungen": [{{"aussage": "...", "beleg": "woertliches Zitat aus dem Artikel"}}],
   "beschreibung": "2-3 Saetze, erzaehlt neugierig weiter, endet mit Aufforderung zum Folgen",
   "hashtags": ["#fakten", "#wusstestdu", "..."]
@@ -313,6 +369,7 @@ Antworte NUR mit JSON:
     daten["_modell"] = modell
     daten["_artikel"] = artikel
     daten["quellen"] = [f"Wikipedia – {titel}: {url}"]
+    daten["_bilder"] = bilder
     return daten
 
 
@@ -385,7 +442,7 @@ def reparieren(daten, ergebnis):
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
-Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 80 bis 125 Woerter.
+Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 100 bis 140 Woerter. Felder "bild" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
@@ -590,27 +647,37 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
 
 # ---------------------------------------------------------------- Clips (Pixabay)
-def clip_suchen(begriff, dauer, schon_benutzt):
-    versuche = [begriff, " ".join(begriff.split()[:2]), begriff.split()[-1], "abstract background"]
-    for q in versuche:
+def clips_suchen(begriff, dauer, schon_benutzt, anzahl=1):
+    """Sucht bis zu `anzahl` verschiedene Pixabay-Videos zum Begriff."""
+    woerter = begriff.split()
+    versuche = [begriff, " ".join(woerter[:2]), " ".join(woerter[-2:]), woerter[-1], woerter[0]]
+    gefunden = []
+    for q in dict.fromkeys(versuche):
         r = requests.get("https://pixabay.com/api/videos/",
-                         params={"key": PIXABAY_KEY, "q": q, "per_page": 20, "safesearch": "true"},
-                         timeout=30)
+                         params={"key": PIXABAY_KEY, "q": q, "per_page": 30, "safesearch": "true"}, timeout=30)
         if r.status_code != 200:
             log(f"Pixabay {r.status_code}: {r.text[:200]}")
             continue
-        treffer = [h for h in r.json().get("hits", []) if h["id"] not in schon_benutzt]
-        if not treffer:
-            continue
+        treffer = [h for h in r.json().get("hits", [])
+                   if h["id"] not in schon_benutzt and h["id"] not in {g[0] for g in gefunden}]
         treffer.sort(key=lambda h: (h.get("duration", 0) >= dauer,
                                     h["videos"]["large"].get("height", 0) >= h["videos"]["large"].get("width", 1),
                                     h.get("likes", 0)), reverse=True)
-        h = treffer[0]
-        for groesse in ("large", "medium", "small"):
-            url = h["videos"].get(groesse, {}).get("url")
+        for h in treffer:
+            url = next((h["videos"][g]["url"] for g in ("large", "medium", "small")
+                        if h["videos"].get(g, {}).get("url")), None)
             if url:
-                return h["id"], url
-    raise RuntimeError(f"Kein Clip gefunden fuer '{begriff}'")
+                gefunden.append((h["id"], url))
+            if len(gefunden) >= anzahl:
+                return gefunden
+    if not gefunden:
+        r = requests.get("https://pixabay.com/api/videos/",
+                         params={"key": PIXABAY_KEY, "q": "abstract background", "per_page": 30}, timeout=30)
+        gefunden = [(h["id"], h["videos"]["medium"]["url"]) for h in r.json().get("hits", [])
+                    if h["id"] not in schon_benutzt][:anzahl]
+    if not gefunden:
+        raise RuntimeError(f"Kein Clip gefunden fuer '{begriff}'")
+    return gefunden
 
 
 def ffmpeg(*args):
@@ -622,6 +689,23 @@ def szene_rendern(clip, dauer, ziel):
     vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
           f"fps={FPS},eq=brightness=-0.06:saturation=1.1")
     ffmpeg("-stream_loop", "-1", "-i", clip, "-t", f"{dauer:.3f}", "-vf", vf, "-an",
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", ziel)
+
+
+def bild_rendern(bild, dauer, ziel, nummer):
+    """Standbild -> bewegtes Segment: unscharfer Hintergrund + ganzes Bild im Vordergrund + langsamer Zoom."""
+    komp = WORK / f"komp_{nummer:02d}.png"
+    W2, H2 = W * 2, H * 2
+    ffmpeg("-i", bild, "-filter_complex",
+           f"[0:v]scale={W2}:{H2}:force_original_aspect_ratio=increase,crop={W2}:{H2},boxblur=40:3,"
+           f"eq=brightness=-0.18[bg];[0:v]scale={W2}:{H2}:force_original_aspect_ratio=decrease[fg];"
+           f"[bg][fg]overlay=(W-w)/2:(H-h)/2", "-frames:v", "1", komp)
+    frames = max(1, int(dauer * FPS))
+    rein = nummer % 2 == 0          # abwechselnd rein- und rauszoomen
+    zoom = f"min(1+0.12*on/{frames},1.12)" if rein else f"max(1.12-0.12*on/{frames},1)"
+    ffmpeg("-i", komp, "-vf",
+           f"zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={FPS},"
+           f"setsar=1,format=yuv420p", "-frames:v", frames,
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", ziel)
 
 
@@ -671,17 +755,45 @@ def video_bauen(daten):
     grenzen = starts + [ende_gesamt]
     dauern = [max(0.8, grenzen[i + 1] - grenzen[i]) for i in range(len(szenen))]
 
-    # 3) Clips laden + schneiden
-    benutzt, segmente = set(), []
+    # 3) Visuals: pro Szene echte Artikel-Bilder + passende Clips, alle ~3 s ein Schnitt
+    bilder = daten.get("_bilder", [])
+    benutzt, segmente, genutzte_bilder = set(), [], []
+    bild_dateien = {}
     for i, (s, seg_dauer) in enumerate(zip(szenen, dauern)):
-        cid, url = clip_suchen(s["suchbegriff_en"], seg_dauer, benutzt)
-        benutzt.add(cid)
-        clip = WORK / f"clip_{i:02d}.mp4"
-        clip.write_bytes(requests.get(url, timeout=300).content)
-        seg = WORK / f"seg_{i:02d}.mp4"
-        szene_rendern(clip, seg_dauer, seg)
-        segmente.append(seg)
-        log(f"Szene {i+1}/{len(szenen)}: '{s['suchbegriff_en']}' ({seg_dauer:.1f} s) ok")
+        teile = max(1, round(seg_dauer / MAX_SEGMENT))
+        teil_dauer = seg_dauer / teile
+        visuals = []
+        nr = s.get("bild")
+        if isinstance(nr, str) and nr.isdigit():
+            nr = int(nr)
+        if isinstance(nr, int) and 0 <= nr < len(bilder):
+            visuals.append(("bild", nr))
+        if len(visuals) < teile:
+            for cid, url in clips_suchen(s.get("suchbegriff_en") or daten["thema"], teil_dauer, benutzt,
+                                         anzahl=teile - len(visuals)):
+                benutzt.add(cid)
+                visuals.append(("clip", url))
+        while len(visuals) < teile:             # zu wenige Treffer -> letztes Visual nochmal
+            visuals.append(visuals[-1])
+        for j, (art, quelle) in enumerate(visuals[:teile]):
+            seg = WORK / f"seg_{i:02d}_{j}.mp4"
+            if art == "bild":
+                if quelle not in bild_dateien:
+                    datei = WORK / f"bild_{quelle:02d}.jpg"
+                    datei.write_bytes(requests.get(bilder[quelle]["url"], headers=WIKI_HEADERS, timeout=120).content)
+                    bild_dateien[quelle] = datei
+                    genutzte_bilder.append(bilder[quelle])
+                bild_rendern(bild_dateien[quelle], teil_dauer, seg, len(segmente))
+            else:
+                clip = WORK / f"clip_{i:02d}_{j}.mp4"
+                clip.write_bytes(requests.get(quelle, timeout=300).content)
+                szene_rendern(clip, teil_dauer, seg)
+            segmente.append(seg)
+        log(f"Szene {i+1}/{len(szenen)}: {teile} Schnitt(e), "
+            f"{'echtes Bild + ' if visuals[0][0] == 'bild' else ''}'{s.get('suchbegriff_en')}' ok")
+    daten["bildnachweise"] = [f"{b['datei'].split(':', 1)[-1]} – {b['urheber']} – {b['lizenz']} (Wikimedia Commons)"
+                              for b in genutzte_bilder]
+    log(f"{len(segmente)} Schnitte, {len(genutzte_bilder)} verschiedene echte Bilder aus dem Artikel")
 
     liste = WORK / "liste.txt"
     liste.write_text("".join(f"file '{p.resolve()}'\n" for p in segmente))
@@ -716,7 +828,9 @@ def telegram_senden(video, daten, check, dauer):
                       for p in check.get("pruefung", []))
     text = (f"📌 TITEL\n{daten['titel']}\n\n"
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
-            f"Quelle: {daten['quellen'][0]}\n\n{' '.join(daten.get('hashtags', []))}\n\n"
+            f"Quelle: {daten['quellen'][0]}\n"
+            + (("Bilder: " + "; ".join(daten.get("bildnachweise", [])) + "\n") if daten.get("bildnachweise") else "")
+            + f"\n{' '.join(daten.get('hashtags', []))}\n\n"
             f"🔎 FAKTENCHECK (Prüfer: {check.get('pruefer', '?')})\n{pruef}\n\n"
             f"🤖 Geschrieben von: {daten.get('_modell')}\n🎙 Stimme: {STIMME_GENUTZT}")
     requests.post(f"{api}/sendMessage", data={"chat_id": TG_CHAT, "text": text[:4000],
