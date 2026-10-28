@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v2.0
+FAKTENFIEBER – Pipeline v2.1
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -28,6 +28,7 @@ USED_FILE = ROOT / "data" / "used_topics.json"
 
 W, H, FPS = 1080, 1920, 30
 MAX_DAUER = 58.0                       # Sekunden, Shorts bleiben unter 60
+MAX_WOERTER = 115
 MAX_SEGMENT = float(os.environ.get("SCHNITT_SEKUNDEN", "3.0"))   # spaetestens alle X s ein neues Bild
 VOICE_NAME = os.environ.get("PIPER_VOICE", "de_DE-thorsten-high")
 LENGTH_SCALE = float(os.environ.get("VOICE_SPEED", "0.92"))   # <1 = schneller
@@ -117,12 +118,8 @@ ANBIETER = []
 
 
 def anbieter_laden():
-    """Reihenfolge: Mistral (bestes Deutsch) -> Groq (schnell) -> Gemini."""
+    """Reihenfolge: Groq (schnell) -> Gemini -> Mistral."""
     liste = []
-    if MISTRAL_KEY:
-        url = "https://api.mistral.ai/v1/chat/completions"
-        for m in ("mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"):
-            liste.append(("Mistral", m, lambda m_, p, t, u=url: _openai_kompatibel(u, MISTRAL_KEY, m_, p, t)))
     if GROQ_KEY:
         url = "https://api.groq.com/openai/v1/chat/completions"
         for m in _groq_modelle():
@@ -130,6 +127,10 @@ def anbieter_laden():
     if GEMINI_KEY:
         for m in _gemini_modelle():
             liste.append(("Gemini", m, _gemini))
+    if MISTRAL_KEY:
+        url = "https://api.mistral.ai/v1/chat/completions"
+        for m in ("mistral-medium-latest", "mistral-small-latest"):
+            liste.append(("Mistral", m, lambda m_, p, t, u=url: _openai_kompatibel(u, MISTRAL_KEY, m_, p, t)))
     if not liste:
         sys.exit("Kein KI-Key gefunden! Mindestens MISTRAL_API_KEY, GROQ_API_KEY oder GEMINI_API_KEY setzen.")
     log("KI-Anbieter: " + ", ".join(f"{a}/{m}" for a, m, _ in liste))
@@ -414,7 +415,7 @@ ECHTE BILDER ZUM THEMA (Nummer: Beschreibung):
 {bildliste}
 
 STIL:
-- 95 bis 120 Woerter gesprochener Text (ca. 45-55 Sekunden bei ruhigem Erzaehltempo). Jedes Wort muss sitzen.
+- 90 bis 110 Woerter gesprochener Text (ca. 45-52 Sekunden). NIEMALS mehr als 115 Woerter! Jedes Wort muss sitzen.
 - Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook mit dem ueberraschendsten Detail.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
@@ -424,7 +425,7 @@ STIL:
   einfache Erklaerung ("ein Gasometer, also ein riesiger Speicher fuer Gas"). Lieber ein Detail weglassen
   als etwas unerklaert lassen. Bildhafte Vergleiche aus dem Alltag sind erlaubt ("so hoch wie ein
   20-stoeckiges Haus"), aber nur, wenn die Zahlen dahinter aus dem Artikel stammen.
-  Ist das Thema eher kompliziert, darfst du bis zu 125 Woerter nutzen.
+  Lieber ein Detail weglassen als die Laenge zu sprengen.
 - Erklaere den Zusammenhang: Nicht nur WAS passiert ist, sondern auch WARUM und WIE. Der Zuschauer soll
   am Ende das Gefuehl haben, wirklich etwas verstanden zu haben.
 - Aufbau: Hook -> Einordnung (was/wo/wann) -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
@@ -466,9 +467,25 @@ Antworte NUR mit JSON:
     daten, modell = ki(prompt, temperatur=0.8)
     daten["thema"] = titel
     daten["_modell"] = modell
+    felder_auffuellen(daten)
     daten["_artikel"] = artikel
     daten["quellen"] = [f"Wikipedia – {titel}: {url}"]
     daten["_bilder"] = bilder
+    return daten
+
+
+def felder_auffuellen(daten):
+    """Falls die KI ein Feld vergisst: sinnvolle Standardwerte statt Absturz."""
+    daten.setdefault("titel", daten.get("thema", "Faktenfieber"))
+    if not daten.get("titel"):
+        daten["titel"] = daten.get("thema", "Faktenfieber")
+    if not daten.get("beschreibung"):
+        daten["beschreibung"] = (f"{daten.get('hook_text') or daten['titel']}. Mehr unnuetzes Wissen, das du "
+                                 f"sofort weitererzaehlen willst: Folg Faktenfieber!")
+    if not daten.get("hashtags"):
+        daten["hashtags"] = ["#fakten", "#wusstestdu", "#unnützeswissen", "#geschichte", "#faktenfieber"]
+    daten.setdefault("behauptungen", [])
+    daten.setdefault("musik_stimmung", "spannend")
     return daten
 
 
@@ -490,6 +507,13 @@ def beleg_gefunden(beleg, artikel):
 
 def faktencheck(daten):
     artikel = daten["_artikel"]
+    # Stufe 0: Laenge (zu lange Texte werden sonst beschleunigt und klingen gehetzt)
+    anzahl = len(" ".join(s["text"] for s in daten.get("szenen", [])).split())
+    if anzahl > MAX_WOERTER:
+        log(f"Stufe 0: Text zu lang ({anzahl} Woerter)")
+        return False, {"pruefung": [], "gesamt": "nicht_ok",
+                       "reparieren": [f"Der Text ist mit {anzahl} Woertern zu lang. Kuerze ihn auf hoechstens 105 Woerter, "
+                                      f"indem du unwichtige Saetze streichst. Hook und Pointe bleiben."]}
     # Stufe 1: Stehen die Zitate wirklich im Artikel?
     pruefung, alle_ok = [], True
     for b in daten.get("behauptungen", []):
@@ -544,7 +568,7 @@ def reparieren(daten, ergebnis):
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
-Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 95 bis 125 Woerter. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
+Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 115. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
@@ -563,7 +587,7 @@ Antworte NUR mit dem korrigierten JSON im selben Format."""
         if neu.get(k):
             daten[k] = neu[k]
     daten["_modell"] = modell
-    return daten
+    return felder_auffuellen(daten)
 
 
 # ---------------------------------------------------------------- Voiceover
@@ -573,7 +597,7 @@ TTS_MODELLE = [m for m in (os.environ.get("TTS_MODEL", ""), "gemini-3.1-flash-tt
                            "gemini-2.5-flash-preview-tts") if m]
 TTS_STIL = os.environ.get("TTS_STIL", (
     "Lies den folgenden deutschen Text wie ein packender Erzaehler eines erfolgreichen YouTube-Shorts-Kanals vor: "
-    "ruhiges, deutliches Erzaehltempo (nicht hetzen!), lebendig und neugierig, natuerliche Betonung, "
+    "angenehmes, normales Erzaehltempo: deutlich und nicht gehetzt, aber auch nicht schleppend. Lebendig und neugierig, natuerliche Betonung, "
     "kurze Pausen nach jedem Satz und eine kleine Spannungspause vor der Pointe. "
     "Lies nur den Text vor, sonst nichts:"))
 STIMME_GENUTZT = "?"
@@ -926,7 +950,7 @@ def _merke_musik(kennung):
 
 
 def _openverse(q, nur_musik=True):
-    params = {"q": q, "license_type": "commercial,modification", "page_size": 30}
+    params = {"q": q, "license_type": "commercial,modification", "page_size": 20}
     if nur_musik:
         params["category"] = "music"
     try:
@@ -968,13 +992,13 @@ ARCHIV_LIZENZ = ('(licenseurl:*publicdomain/zero* OR licenseurl:*publicdomain/ma
 
 
 def _archive(themen):
-    """Internet Archive (archive.org): riesige, zuverlaessige Sammlung freier Musik, ohne Key."""
-    teil = " OR ".join(f'subject:"{t}"' for t in themen)
+    """Internet Archive (archive.org): riesige, zuverlaessige Sammlung freier Musik (Netlabels), ohne Key."""
+    teil = " OR ".join(f'"{t}"' for t in themen)
     try:
         r = requests.get("https://archive.org/advancedsearch.php", headers=WIKI_HEADERS, timeout=40, params={
-            "q": f"mediatype:audio AND {ARCHIV_LIZENZ} AND ({teil}) AND NOT subject:podcast",
+            "q": f"mediatype:audio AND collection:(netlabels OR opensource_audio OR audio_music) AND subject:({teil})",
             "fl[]": ["identifier", "title", "creator", "licenseurl", "subject"],
-            "rows": 60, "sort[]": "downloads desc", "output": "json"})
+            "rows": 100, "sort[]": "downloads desc", "output": "json"})
         if r.status_code != 200:
             log(f"Archive.org antwortet {r.status_code}")
             return []
@@ -984,17 +1008,25 @@ def _archive(themen):
         return []
     out = []
     for d in docs:
-        lic = str(d.get("licenseurl", ""))
-        art = "cc0" if "publicdomain" in lic else ("by-sa" if "by-sa" in lic else "by")
+        lic = str(d.get("licenseurl", "")).lower()
+        if "publicdomain" in lic:
+            art = "cc0"
+        elif re.search(r"licenses/by-sa/", lic):
+            art = "by-sa"
+        elif re.search(r"licenses/by/", lic):
+            art = "by"
+        else:
+            continue                          # NC, ND oder ohne Lizenz -> nicht erlaubt
         version = (re.search(r"/(\d\.\d)", lic) or [None, ""])[1]
         subj = d.get("subject", "")
+        creator = d.get("creator") or "unbekannt"
         out.append({"id": f"ia_{d['identifier']}", "archive_id": d["identifier"], "url": None,
-                    "title": d.get("title") or d["identifier"], "creator": (d.get("creator") or "unbekannt")
-                    if isinstance(d.get("creator"), str) else ", ".join(d.get("creator", [])[:2]),
+                    "title": d.get("title") or d["identifier"],
+                    "creator": creator if isinstance(creator, str) else ", ".join(creator[:2]),
                     "license": art, "license_version": version,
                     "landing": f"https://archive.org/details/{d['identifier']}",
                     "tags": ", ".join(subj[:6]) if isinstance(subj, list) else str(subj)[:80], "dauer": 0})
-    log(f"Archive.org ({', '.join(themen[:2])}…): {len(out)} Alben gefunden")
+    log(f"Archive.org ({', '.join(themen[:2])}…): {len(docs)} Alben, {len(out)} mit passender Lizenz")
     return out
 
 
@@ -1499,7 +1531,7 @@ def main():
                 kandidat["szenen"][0]["text"] = "Wusstest du schon? " + erste
             log(f"Skript fertig: {kandidat['titel']} – pruefe Fakten ...")
             ok, ergebnis = faktencheck(kandidat)
-            for runde in range(1, 3):
+            for runde in range(1, 4):
                 if ok:
                     break
                 log(f"Reparatur-Runde {runde}: korrigiere beanstandete Stellen ...")
@@ -1517,6 +1549,7 @@ def main():
     if not daten:
         sys.exit("Kein Thema hat den Faktencheck bestanden. Bitte nochmal starten.")
 
+    felder_auffuellen(daten)
     video, dauer = video_bauen(daten)
     meta = {k: v for k, v in daten.items() if k != "_artikel"}
     meta.update(faktencheck=check, dauer=round(dauer, 1))
