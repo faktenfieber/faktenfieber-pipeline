@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v2.4
+FAKTENFIEBER – Pipeline v3.0
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1444,10 +1444,10 @@ def video_bauen(daten):
 
 
 # ---------------------------------------------------------------- Telegram
-def telegram_senden(video, daten, check, dauer):
+def telegram_senden(video, daten, check, dauer, knoepfe=None, kopfzeile=""):
     if not (TG_TOKEN and TG_CHAT):
         log("Telegram nicht konfiguriert, ueberspringe.")
-        return
+        return None
     api = f"https://api.telegram.org/bot{TG_TOKEN}"
     caption = f"🎬 {daten['titel']}\n⏱ {dauer:.0f} s | {daten['thema']}"
     with open(video, "rb") as f:
@@ -1460,7 +1460,7 @@ def telegram_senden(video, daten, check, dauer):
 
     pruef = "\n".join(f"{'✅' if p.get('beleg_im_text') else '⚠️'} {p.get('behauptung')}"
                       for p in check.get("pruefung", []))
-    text = (f"📌 TITEL\n{daten['titel']}\n\n"
+    text = (kopfzeile + f"📌 TITEL\n{daten['titel']}\n\n"
             f"🪝 HOOK-TEXT\n{daten.get('hook_text', '–')}\n\n"
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
             f"Quelle: {daten['quellen'][0]}\n"
@@ -1469,8 +1469,14 @@ def telegram_senden(video, daten, check, dauer):
             + f"\n{' '.join(daten.get('hashtags', []))}\n\n"
             f"🔎 FAKTENCHECK (Prüfer: {check.get('pruefer', '?')})\n{pruef}\n\n"
             f"🤖 Geschrieben von: {daten.get('_modell')}\n🎙 Stimme: {STIMME_GENUTZT}")
-    requests.post(f"{api}/sendMessage", data={"chat_id": TG_CHAT, "text": text[:4000],
-                                              "disable_web_page_preview": "true"}, timeout=60)
+    daten_tg = {"chat_id": TG_CHAT, "text": text[:4000], "disable_web_page_preview": "true"}
+    if knoepfe:
+        daten_tg["reply_markup"] = json.dumps({"inline_keyboard": knoepfe})
+    r = requests.post(f"{api}/sendMessage", data=daten_tg, timeout=60)
+    try:
+        return r.json()["result"]["message_id"]
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------- YouTube-Upload
@@ -1492,7 +1498,8 @@ def youtube_beschreibung(daten):
     return "\n".join(teile).replace("<", "").replace(">", "")[:4900]
 
 
-def youtube_hochladen(video, daten, sichtbarkeit="private"):
+def youtube_hochladen(video, daten, sichtbarkeit=None):
+    sichtbarkeit = sichtbarkeit or os.environ.get("YT_SICHTBARKEIT", "private")
     if not (YT_CLIENT_ID and YT_CLIENT_SECRET and YT_REFRESH_TOKEN):
         raise RuntimeError("YouTube-Secrets fehlen (YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN)")
     r = requests.post("https://oauth2.googleapis.com/token", timeout=30, data={
@@ -1672,8 +1679,9 @@ def instagram_hochladen(video, daten):
     raise RuntimeError("Instagram-Upload fehlgeschlagen: " + " | ".join(fehler))
 
 
-# ---------------------------------------------------------------- Main
-def main():
+# ---------------------------------------------------------------- Video erstellen (gemeinsamer Kern)
+def erstelle_video():
+    """Recherche -> Skript -> Faktencheck -> Video. Gibt (video, daten, check, dauer) zurueck."""
     for d in (OUT, WORK):
         d.mkdir(parents=True, exist_ok=True)
     if not PIXABAY_KEY:
@@ -1712,27 +1720,252 @@ def main():
 
     felder_auffuellen(daten)
     video, dauer = video_bauen(daten)
-    meta = {k: v for k, v in daten.items() if k != "_artikel"}
+    meta = {k: v for k, v in daten.items() if k not in ("_artikel", "_bilder")}
     meta.update(faktencheck=check, dauer=round(dauer, 1))
     (OUT / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     speichere_thema(daten["thema"])
+    return video, daten, check, dauer
+
+
+def veroeffentlichen(video, daten):
+    """Laedt auf YouTube + Instagram hoch und meldet das Ergebnis in Telegram. Gibt Ergebnis-Dict zurueck."""
+    ergebnis = {}
+    try:
+        vid = youtube_hochladen(video, daten)
+        ergebnis["youtube"] = f"https://youtube.com/shorts/{vid}"
+        hinweis = ("" if os.environ.get("YT_SICHTBARKEIT") == "public" else
+                   "\n(noch privat: bitte in der YouTube-Studio-App auf „Öffentlich“ stellen, bis das Audit durch ist)")
+        telegram_text(f"▶️ YouTube: {ergebnis['youtube']}{hinweis}")
+    except Exception as e:
+        log(f"YouTube-Fehler: {e}")
+        telegram_text(f"❌ YouTube-Upload fehlgeschlagen:\n{e}")
+    try:
+        ergebnis["instagram"] = instagram_hochladen(video, daten)
+        telegram_text(f"📸 Instagram: {ergebnis['instagram']}")
+    except Exception as e:
+        log(f"Instagram-Fehler: {e}")
+        telegram_text(f"❌ Instagram-Upload fehlgeschlagen:\n{e}")
+    return ergebnis
+
+
+# ---------------------------------------------------------------- Modus "test": sofort alles (wie bisher)
+def main():
+    video, daten, check, dauer = erstelle_video()
     telegram_senden(video, daten, check, dauer)
-    if os.environ.get("YT_UPLOAD") == "1":
-        try:
-            vid = youtube_hochladen(video, daten)
-            telegram_text(f"▶️ Auf YouTube hochgeladen (privat):\nhttps://youtube.com/shorts/{vid}\n\n"
-                          "Solange das API-Audit läuft, bitte in der YouTube-Studio-App auf „Öffentlich“ stellen.")
-        except Exception as e:
-            log(f"YouTube-Fehler: {e}")
-            telegram_text(f"❌ YouTube-Upload fehlgeschlagen:\n{e}")
-    if os.environ.get("IG_UPLOAD") == "1":
-        try:
-            link = instagram_hochladen(video, daten)
-            telegram_text(f"📸 Auf Instagram veröffentlicht:\n{link}")
-        except Exception as e:
-            log(f"Instagram-Fehler: {e}")
-            telegram_text(f"❌ Instagram-Upload fehlgeschlagen:\n{e}")
+    if os.environ.get("YT_UPLOAD") == "1" or os.environ.get("IG_UPLOAD") == "1":
+        veroeffentlichen(video, daten)
     log(f"FERTIG: {video} ({dauer:.1f} s)")
+
+
+# ---------------------------------------------------------------- Zeitplan + Freigabe
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
+ZEITZONE = ZoneInfo("Europe/Vienna")
+SLOTS = [(8, 0), (18, 0)]                        # Posting-Zeiten
+VERFALL_STUNDEN = 3                              # so lange nach dem Slot darf noch freigegeben werden
+MAX_NEU = 3                                      # so oft darf pro Slot "Neu machen" gedrueckt werden
+STATUS_DATEI = ROOT / "data" / "status.json"
+GH_REPO = os.environ.get("GITHUB_REPOSITORY", "")
+GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+
+
+def jetzt():
+    return datetime.now(ZEITZONE)
+
+
+def slot_zeit(slot):
+    return datetime.strptime(slot, "%Y-%m-%d %H:%M").replace(tzinfo=ZEITZONE)
+
+
+def naechster_slot(ab=None):
+    ab = ab or jetzt()
+    for tage in range(0, 3):
+        tag = (ab + timedelta(days=tage)).date()
+        for h, m in SLOTS:
+            kandidat = datetime(tag.year, tag.month, tag.day, h, m, tzinfo=ZEITZONE)
+            if kandidat > ab + timedelta(minutes=20):
+                return kandidat.strftime("%Y-%m-%d %H:%M")
+
+
+def status_laden():
+    try:
+        return json.loads(STATUS_DATEI.read_text(encoding="utf-8"))
+    except Exception:
+        return {"tg_offset": 0, "slots": {}}
+
+
+def status_speichern(st):
+    # alte Eintraege (aelter als 7 Tage) aufraeumen
+    grenze = jetzt() - timedelta(days=7)
+    st["slots"] = {k: v for k, v in st.get("slots", {}).items() if slot_zeit(k) > grenze}
+    STATUS_DATEI.parent.mkdir(parents=True, exist_ok=True)
+    STATUS_DATEI.write_text(json.dumps(st, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def tg(methode, **daten):
+    if not (TG_TOKEN and TG_CHAT):
+        return {}
+    try:
+        return requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/{methode}", data=daten, timeout=40).json()
+    except Exception:
+        return {}
+
+
+def modus_erstellen():
+    """Baut das Video fuer den naechsten Slot und schickt es mit Freigabe-Knoepfen an Telegram."""
+    st = status_laden()
+    slot = os.environ.get("SLOT", "").strip() or naechster_slot()
+    eintrag = st["slots"].get(slot, {})
+    if eintrag.get("status") in ("wartet", "freigegeben", "gepostet"):
+        log(f"Fuer {slot} gibt es schon ein Video ({eintrag['status']}) – nichts zu tun.")
+        return
+    log(f"Erstelle Video fuer {slot} ...")
+    video, daten, check, dauer = erstelle_video()
+    uhrzeit = slot.split(" ")[1]
+    tag = "heute" if slot_zeit(slot).date() == jetzt().date() else slot_zeit(slot).strftime("%d.%m.")
+    knoepfe = [[{"text": "✅ Freigeben", "callback_data": f"ok|{slot}"},
+                {"text": "❌ Neu machen", "callback_data": f"neu|{slot}"}]]
+    msg = telegram_senden(video, daten, check, dauer, knoepfe=knoepfe,
+                          kopfzeile=f"🗓 Geplant für {tag} {uhrzeit} Uhr\n\n")
+    st = status_laden()                           # neu laden (koennte sich geaendert haben)
+    st["slots"][slot] = {"status": "wartet", "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+                         "message_id": msg, "titel": daten["titel"],
+                         "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat()}
+    status_speichern(st)
+    log(f"FERTIG: Video fuer {slot} wartet auf Freigabe")
+
+
+def _artefakt_laden(run_id):
+    """Holt das fertige Video (Artefakt) aus dem Erstell-Lauf."""
+    import io
+    import zipfile
+    kopf = {"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"}
+    r = requests.get(f"https://api.github.com/repos/{GH_REPO}/actions/runs/{run_id}/artifacts", headers=kopf, timeout=30)
+    artefakte = [a for a in r.json().get("artifacts", []) if not a.get("expired")]
+    if not artefakte:
+        raise RuntimeError(f"Kein Video-Artefakt im Lauf {run_id} gefunden")
+    z = requests.get(artefakte[0]["archive_download_url"], headers=kopf, timeout=300)
+    ziel = OUT / f"posten_{run_id}"
+    ziel.mkdir(parents=True, exist_ok=True)
+    zipfile.ZipFile(io.BytesIO(z.content)).extractall(ziel)
+    return ziel / "faktenfieber.mp4", json.loads((ziel / "meta.json").read_text(encoding="utf-8"))
+
+
+def _neu_starten(slot):
+    """Startet den Erstell-Workflow fuer diesen Slot nochmal (nach 'Neu machen')."""
+    r = requests.post(f"https://api.github.com/repos/{GH_REPO}/actions/workflows/erstellen.yml/dispatches",
+                      headers={"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"},
+                      json={"ref": "main", "inputs": {"slot": slot}}, timeout=30)
+    return r.status_code == 204
+
+
+def modus_pruefen():
+    """Laeuft regelmaessig: liest die Knopfdruecke aus Telegram und postet freigegebene Videos zur Slot-Zeit."""
+    OUT.mkdir(parents=True, exist_ok=True)
+    WORK.mkdir(parents=True, exist_ok=True)
+    st = status_laden()
+
+    # 1) Knopfdruecke abholen
+    upd = tg("getUpdates", offset=st.get("tg_offset", 0), timeout=0, allowed_updates=json.dumps(["callback_query"]))
+    for u in upd.get("result", []):
+        st["tg_offset"] = u["update_id"] + 1
+        cb = u.get("callback_query")
+        if not cb or str(cb.get("message", {}).get("chat", {}).get("id")) != str(TG_CHAT):
+            continue
+        aktion, _, slot = cb.get("data", "").partition("|")
+        eintrag = st["slots"].get(slot)
+        if not eintrag or eintrag.get("status") != "wartet":
+            tg("answerCallbackQuery", callback_query_id=cb["id"], text="Schon erledigt 👍")
+            continue
+        uhr = slot.split(" ")[1]
+        if aktion == "ok":
+            eintrag["status"] = "freigegeben"
+            tg("answerCallbackQuery", callback_query_id=cb["id"], text=f"✅ Freigegeben für {uhr} Uhr")
+            tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+               reply_markup=json.dumps({"inline_keyboard": [[{"text": f"✅ Freigegeben – geht um {uhr} Uhr raus",
+                                                               "callback_data": "x"}]]}))
+            log(f"{slot}: freigegeben")
+        elif aktion == "neu":
+            if eintrag.get("neu_gemacht", 0) >= MAX_NEU:
+                tg("answerCallbackQuery", callback_query_id=cb["id"], text="Maximal 3x neu pro Termin 🙈")
+                continue
+            eintrag["status"] = "verworfen"
+            eintrag["neu_gemacht"] = eintrag.get("neu_gemacht", 0) + 1
+            tg("answerCallbackQuery", callback_query_id=cb["id"], text="❌ Verworfen – ich mache ein neues!")
+            tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+               reply_markup=json.dumps({"inline_keyboard": [[{"text": "❌ Verworfen", "callback_data": "x"}]]}))
+            status_speichern(st)                  # damit der neue Lauf den Status sieht
+            if _neu_starten(slot):
+                telegram_text(f"🔄 Baue ein neues Video für {uhr} Uhr. Kommt in ca. 10–15 Minuten.")
+            else:
+                telegram_text("⚠️ Konnte das neue Video nicht automatisch starten. Bitte in GitHub "
+                              "unter Actions → Erstellen → Run workflow starten.")
+            log(f"{slot}: verworfen, neues Video angefordert")
+
+    # 2) Faellige Videos posten, verfallene melden, Erinnerungen
+    for slot, eintrag in sorted(st["slots"].items()):
+        zeit = slot_zeit(slot)
+        if eintrag.get("status") == "freigegeben" and jetzt() >= zeit - timedelta(minutes=3):
+            try:
+                video, meta = _artefakt_laden(eintrag["run_id"])
+                ergebnis = veroeffentlichen(video, meta)
+                eintrag["status"] = "gepostet"
+                eintrag["links"] = ergebnis
+                log(f"{slot}: gepostet {ergebnis}")
+            except Exception as e:
+                eintrag["fehler"] = eintrag.get("fehler", 0) + 1
+                log(f"{slot}: Posten fehlgeschlagen: {e}")
+                if eintrag["fehler"] >= 3:
+                    eintrag["status"] = "fehler"
+                    telegram_text(f"❌ Video für {slot} konnte nicht gepostet werden:\n{e}")
+            status_speichern(st)                  # sofort sichern, damit nie doppelt gepostet wird
+        elif eintrag.get("status") == "wartet":
+            if jetzt() > zeit + timedelta(hours=VERFALL_STUNDEN):
+                eintrag["status"] = "verfallen"
+                tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+                   reply_markup=json.dumps({"inline_keyboard": [[{"text": "⌛ Verfallen", "callback_data": "x"}]]}))
+                telegram_text(f"⌛ Das Video für {slot} wurde nicht freigegeben und verfällt. Nichts wurde gepostet.")
+            elif jetzt() > zeit - timedelta(minutes=35) and not eintrag.get("erinnert"):
+                eintrag["erinnert"] = True
+                telegram_text(f"⏰ Erinnerung: Das Video für {slot.split(' ')[1]} Uhr wartet noch auf deine Freigabe "
+                              f"(siehe oben ✅ / ❌).")
+
+    # 3) Instagram-Token rechtzeitig verlaengern (laeuft sonst nach 60 Tagen ab)
+    try:
+        instagram_token_pflegen(st)
+    except Exception as e:
+        log(f"Instagram-Token-Verlaengerung: {e}")
+    status_speichern(st)
+
+
+def instagram_token_pflegen(st):
+    letzte = st.get("ig_token_erneuert")
+    if letzte and jetzt() - datetime.fromisoformat(letzte) < timedelta(days=20):
+        return
+    if not (IG_TOKEN and GH_PAT and GH_REPO):
+        return
+    r = requests.get(f"{IG_API}/refresh_access_token", timeout=30,
+                     params={"grant_type": "ig_refresh_token", "access_token": IG_TOKEN})
+    neu = r.json().get("access_token")
+    if not neu:
+        telegram_text(f"⚠️ Instagram-Token konnte nicht verlängert werden: {r.text[:200]}")
+        st["ig_token_erneuert"] = jetzt().isoformat()      # nicht jede Viertelstunde nerven
+        return
+    from base64 import b64encode
+    from nacl import encoding, public
+    kopf = {"Authorization": f"Bearer {GH_PAT}", "Accept": "application/vnd.github+json"}
+    k = requests.get(f"https://api.github.com/repos/{GH_REPO}/actions/secrets/public-key", headers=kopf, timeout=30).json()
+    box = public.SealedBox(public.PublicKey(k["key"].encode(), encoding.Base64Encoder()))
+    wert = b64encode(box.encrypt(neu.encode())).decode()
+    r = requests.put(f"https://api.github.com/repos/{GH_REPO}/actions/secrets/IG_ACCESS_TOKEN", headers=kopf,
+                     json={"encrypted_value": wert, "key_id": k["key_id"]}, timeout=30)
+    if r.status_code in (201, 204):
+        st["ig_token_erneuert"] = jetzt().isoformat()
+        log("Instagram-Token verlängert ✅")
+    else:
+        telegram_text(f"⚠️ Neuer Instagram-Token konnte nicht gespeichert werden ({r.status_code}). "
+                      f"Bitte GH_PAT prüfen (braucht 'Secrets: Read and write').")
 
 
 def telegram_text(text):
@@ -1746,7 +1979,8 @@ def telegram_text(text):
 
 if __name__ == "__main__":
     try:
-        main()
+        modus = sys.argv[1] if len(sys.argv) > 1 else "test"
+        {"test": main, "erstellen": modus_erstellen, "pruefen": modus_pruefen}[modus]()
     except SystemExit as e:
         if e.code not in (0, None):
             telegram_text(f"❌ Faktenfieber: Kein Video erstellt.\n{e.code}")
