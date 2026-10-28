@@ -2,12 +2,13 @@
  "tg_offset": 0,
  "slots": {
   "2026-10-28 18:00": {
-   "status": "wartet",
+   "status": "verworfen",
    "run_id": "40715815843",
    "message_id": 51,
    "titel": "Todesstrafe für Maschinenbruch? Die Ludditen",
-   "neu_gemacht": 0,
+   "neu_gemacht": 1,
    "erstellt": "2026-10-28T16:31:00.662066+01:00"
   }
- }
+ },
+ "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00"
 }
