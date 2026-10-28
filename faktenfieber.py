@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v2.2
+FAKTENFIEBER – Pipeline v2.3
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -28,7 +28,7 @@ USED_FILE = ROOT / "data" / "used_topics.json"
 
 W, H, FPS = 1080, 1920, 30
 MAX_DAUER = 58.0                       # Sekunden, Shorts bleiben unter 60
-MAX_WOERTER = 115
+MAX_WOERTER = 125
 MAX_SEGMENT = float(os.environ.get("SCHNITT_SEKUNDEN", "3.0"))   # spaetestens alle X s ein neues Bild
 VOICE_NAME = os.environ.get("PIPER_VOICE", "de_DE-thorsten-high")
 LENGTH_SCALE = float(os.environ.get("VOICE_SPEED", "0.92"))   # <1 = schneller
@@ -63,13 +63,25 @@ def _openai_kompatibel(url, key, modell, prompt, temperatur):
         "temperature": temperatur,
         "response_format": {"type": "json_object"},
     }
-    r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=90, json=body)
+    if "gpt-oss" in modell:
+        body["reasoning_effort"] = "low"         # sonst "denkt" es so lange, dass die Antwort leer bleibt
+    senden = lambda: requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=120, json=body)
+    r = senden()
+    if r.status_code == 400 and "reasoning_effort" in r.text:
+        body.pop("reasoning_effort", None)
+        r = senden()
     if r.status_code == 400 and "json_validate" in r.text:
         body.pop("response_format")          # manche Modelle mögen den JSON-Modus nicht
-        r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=90, json=body)
+        r = senden()
     if r.status_code != 200:
         return r.status_code, r.text[:700], None
-    return 200, "", r.json()["choices"][0]["message"]["content"]
+    inhalt = (r.json()["choices"][0]["message"].get("content") or "").strip()
+    if not inhalt and "response_format" in body:   # leere Antwort -> ohne JSON-Modus nochmal
+        body.pop("response_format")
+        r = senden()
+        if r.status_code == 200:
+            inhalt = (r.json()["choices"][0]["message"].get("content") or "").strip()
+    return (200, "", inhalt) if inhalt else (0, "leere Antwort", None)
 
 
 def _gemini(modell, prompt, temperatur):
@@ -139,8 +151,12 @@ def anbieter_laden():
 
 def wartezeit(info):
     """Liest 'try again in 13.3s' (Groq) bzw. 'retryDelay': '13s' (Gemini) aus der Fehlermeldung."""
-    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", info or "") or \
-        re.search(r'retryDelay"?\s*:\s*"?([\d.]+)s', info or "")
+    t = info or ""
+    h = re.search(r"retry in (\d+)h", t, re.I)
+    if h:
+        return int(h.group(1)) * 3600.0
+    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", t) or \
+        re.search(r'retryDelay"?\s*:\s*"?([\d.]+)s', t)
     if not m:
         return None
     if m.lastindex == 2:
@@ -174,8 +190,19 @@ def ki(prompt, temperatur=0.8, nicht=None):
                 except ValueError as e:
                     code, info = 0, f"kaputtes JSON: {e}"
             fehler = f"{name}/{modell}: {code} {info}"
-            log(f"KI-Problem -> {fehler}")
+            kurz = re.sub(r"\s+", " ", fehler)[:260]
+            log(f"KI-Problem -> {kurz}")
             warten = wartezeit(info)
+            text_info = info or ""
+            if code == 429 and ("Request too large" in text_info or "exceed the enforced limit" in text_info):
+                break                            # diese Anfrage ist fuer das Modell zu gross -> naechstes Modell
+            if code == 429 and ("per day" in text_info.lower() or "PerDay" in text_info
+                                or (warten and warten > 3600)):
+                GESPERRT[(name, modell)] = time.time() + 10**9   # Tageslimit -> fuer diesen Lauf raus
+                break
+            if code == 429 and not warten and name == "Mistral":
+                GESPERRT[(name, modell)] = time.time() + 900     # Mistral ohne Hinweis -> 15 Min. Pause
+                break
             if code == 429 and warten and warten <= 65 and versuch < 2:
                 log(f"   Limit pro Minute erreicht -> warte {warten:.0f} s wie verlangt")
                 time.sleep(warten + 1)
@@ -415,7 +442,7 @@ ECHTE BILDER ZUM THEMA (Nummer: Beschreibung):
 {bildliste}
 
 STIL:
-- 90 bis 110 Woerter gesprochener Text (ca. 45-52 Sekunden). NIEMALS mehr als 115 Woerter! Jedes Wort muss sitzen.
+- 90 bis 110 Woerter gesprochener Text (ca. 45-52 Sekunden). NIEMALS mehr als 120 Woerter! Jedes Wort muss sitzen.
 - Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook mit dem ueberraschendsten Detail.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
@@ -512,7 +539,7 @@ def faktencheck(daten):
     if anzahl > MAX_WOERTER:
         log(f"Stufe 0: Text zu lang ({anzahl} Woerter)")
         return False, {"pruefung": [], "gesamt": "nicht_ok",
-                       "reparieren": [f"Der Text ist mit {anzahl} Woertern zu lang. Kuerze ihn auf hoechstens 105 Woerter, "
+                       "reparieren": [f"Der Text ist mit {anzahl} Woertern zu lang. Kuerze ihn auf hoechstens 100 Woerter, "
                                       f"indem du unwichtige Saetze streichst. Hook und Pointe bleiben."]}
     # Stufe 1: Stehen die Zitate wirklich im Artikel?
     pruefung, alle_ok = [], True
@@ -537,7 +564,10 @@ def faktencheck(daten):
 Jede FAKTENAUSSAGE im Sprechtext muss durch den Artikel gedeckt sein.
 schwere "faktisch" = erfundene oder falsche Fakten, falsche Zahlen/Daten/Namen, verdrehte Zusammenhaenge.
 schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, "Wusstest du", Spannungsaufbau,
-einfache Erklaerungen von Begriffen und veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen).
+einfache Erklaerungen von Begriffen und veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen),
+sowie harmlose Vereinfachungen, die nichts Falsches behaupten (z. B. nur das Startjahr nennen, "Koenige" statt
+"Monarchen", eine Zeitspanne grob zusammenfassen).
+"faktisch" NUR, wenn eine Aussage dem Artikel widerspricht oder etwas behauptet, das dort nicht steht.
 Melde nur echte Probleme, keine Kleinigkeiten.
 
 ARTIKEL:
@@ -568,7 +598,7 @@ def reparieren(daten, ergebnis):
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
-Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 115. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
+Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 120. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
