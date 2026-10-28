@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v3.1
+FAKTENFIEBER – Pipeline v3.2
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1858,42 +1858,17 @@ def modus_pruefen():
     WORK.mkdir(parents=True, exist_ok=True)
     st = status_laden()
 
-    # 1) Knopfdruecke abholen
+    # 1) Knopfdruecke: sofort vom Telegram-Tuersteher (Cloudflare) weitergereicht, sonst selbst abholen
+    if os.environ.get("AKTION") and os.environ.get("AKTION_SLOT"):
+        aktion_verarbeiten(st, os.environ["AKTION"], os.environ["AKTION_SLOT"], vom_tuersteher=True)
     upd = tg("getUpdates", offset=st.get("tg_offset", 0), timeout=0, allowed_updates=json.dumps(["callback_query"]))
-    for u in upd.get("result", []):
+    for u in upd.get("result", []) if upd.get("ok") else []:
         st["tg_offset"] = u["update_id"] + 1
         cb = u.get("callback_query")
         if not cb or str(cb.get("message", {}).get("chat", {}).get("id")) != str(TG_CHAT):
             continue
         aktion, _, slot = cb.get("data", "").partition("|")
-        eintrag = st["slots"].get(slot)
-        if not eintrag or eintrag.get("status") != "wartet":
-            tg("answerCallbackQuery", callback_query_id=cb["id"], text="Schon erledigt 👍")
-            continue
-        uhr = slot.split(" ")[1]
-        if aktion == "ok":
-            eintrag["status"] = "freigegeben"
-            tg("answerCallbackQuery", callback_query_id=cb["id"], text=f"✅ Freigegeben für {uhr} Uhr")
-            tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
-               reply_markup=json.dumps({"inline_keyboard": [[{"text": f"✅ Freigegeben – geht um {uhr} Uhr raus",
-                                                               "callback_data": "x"}]]}))
-            log(f"{slot}: freigegeben")
-        elif aktion == "neu":
-            if eintrag.get("neu_gemacht", 0) >= MAX_NEU:
-                tg("answerCallbackQuery", callback_query_id=cb["id"], text="Maximal 3x neu pro Termin 🙈")
-                continue
-            eintrag["status"] = "verworfen"
-            eintrag["neu_gemacht"] = eintrag.get("neu_gemacht", 0) + 1
-            tg("answerCallbackQuery", callback_query_id=cb["id"], text="❌ Verworfen – ich mache ein neues!")
-            tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
-               reply_markup=json.dumps({"inline_keyboard": [[{"text": "❌ Verworfen", "callback_data": "x"}]]}))
-            status_speichern(st)                  # damit der neue Lauf den Status sieht
-            if _neu_starten(slot):
-                telegram_text(f"🔄 Baue ein neues Video für {uhr} Uhr. Kommt in ca. 10–15 Minuten.")
-            else:
-                telegram_text("⚠️ Konnte das neue Video nicht automatisch starten. Bitte in GitHub "
-                              "unter Actions → Erstellen → Run workflow starten.")
-            log(f"{slot}: verworfen, neues Video angefordert")
+        aktion_verarbeiten(st, aktion, slot, cb_id=cb["id"])
 
     # 2) Faellige Videos posten, verfallene melden, Erinnerungen
     for slot, eintrag in sorted(st["slots"].items()):
@@ -1929,6 +1904,43 @@ def modus_pruefen():
     except Exception as e:
         log(f"Instagram-Token-Verlaengerung: {e}")
     status_speichern(st)
+
+
+def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
+    """✅ / ❌ fuer einen Termin umsetzen."""
+    antwort = (lambda text: tg("answerCallbackQuery", callback_query_id=cb_id, text=text)) if cb_id else (lambda text: None)
+    eintrag = st["slots"].get(slot)
+    if not eintrag or eintrag.get("status") != "wartet":
+        antwort("Schon erledigt 👍")
+        if vom_tuersteher and eintrag:
+            telegram_text(f"ℹ️ Für {slot} ist schon alles erledigt (Status: {eintrag.get('status')}).")
+        return
+    uhr = slot.split(" ")[1]
+    if aktion == "ok":
+        eintrag["status"] = "freigegeben"
+        antwort(f"✅ Freigegeben für {uhr} Uhr")
+        tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+           reply_markup=json.dumps({"inline_keyboard": [[{"text": f"✅ Freigegeben – geht um {uhr} Uhr raus",
+                                                           "callback_data": "x"}]]}))
+        log(f"{slot}: freigegeben")
+    elif aktion == "neu":
+        if eintrag.get("neu_gemacht", 0) >= MAX_NEU:
+            antwort("Maximal 3x neu pro Termin 🙈")
+            telegram_text(f"🙈 Für {uhr} Uhr wurde schon {MAX_NEU}x neu gemacht. Bitte dieses Video freigeben oder verfallen lassen.")
+            return
+        eintrag["status"] = "verworfen"
+        eintrag["neu_gemacht"] = eintrag.get("neu_gemacht", 0) + 1
+        antwort("❌ Verworfen – ich mache ein neues!")
+        tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+           reply_markup=json.dumps({"inline_keyboard": [[{"text": "❌ Verworfen", "callback_data": "x"}]]}))
+        status_speichern(st)                      # damit der neue Lauf den Status sieht
+        if _neu_starten(slot):
+            if not vom_tuersteher:                # der Tuersteher hat das schon bestaetigt
+                telegram_text(f"🔄 Baue ein neues Video für {uhr} Uhr. Kommt in ca. 10–15 Minuten.")
+        else:
+            telegram_text("⚠️ Konnte das neue Video nicht automatisch starten. Bitte in GitHub "
+                          "unter Actions → Erstellen → Run workflow starten.")
+        log(f"{slot}: verworfen, neues Video angefordert")
 
 
 def instagram_token_pflegen(st):
