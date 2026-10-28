@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v2.3.1
+FAKTENFIEBER – Pipeline v2.4
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -254,13 +254,24 @@ THEMEN_SUCHE = [
 KATEGORIE_SUCHE = "incategory:Wikipedia:Exzellent|Wikipedia:Lesenswert"
 
 
+def schon_benutzt(titel, benutzt):
+    """Auch aehnliche Titel zaehlen als benutzt (z. B. 'Gasometer Neunkirchen' ~ 'Gasometerexplosion in Neunkirchen')."""
+    n = re.sub(r"[^a-z0-9äöüß]", "", titel.lower())
+    for b in benutzt:
+        m = re.sub(r"[^a-z0-9äöüß]", "", str(b).lower())
+        if n == m or (len(n) > 6 and (n in m or m in n)) or difflib.SequenceMatcher(None, n, m).ratio() > 0.85:
+            return True
+    return False
+
+
 def wiki_kandidaten(benutzt, anzahl=10):
     titel = set()
     # ~3/4 gezielt aus Geschichte & unnuetzem Wissen, Rest zufaellig quer durch alles
     for begriff in random.sample(THEMEN_SUCHE, 5):
         try:
             daten = wiki(list="search", srsearch=f"{KATEGORIE_SUCHE} {begriff}", srlimit=20, srnamespace=0)
-            treffer = [t["title"] for t in daten.get("query", {}).get("search", []) if t["title"] not in benutzt]
+            treffer = [t["title"] for t in daten.get("query", {}).get("search", [])
+                       if not schon_benutzt(t["title"], benutzt)]
         except Exception as e:
             log(f"Wiki-Suche '{begriff}' fehlgeschlagen: {e}")
             treffer = []
@@ -273,7 +284,7 @@ def wiki_kandidaten(benutzt, anzahl=10):
         daten = wiki(list="categorymembers", cmtitle=kat, cmlimit=50, cmnamespace=0,
                      cmstartsortkeyprefix=random.choice(string.ascii_uppercase))
         mitglieder = [m["title"] for m in daten.get("query", {}).get("categorymembers", [])
-                      if m["title"] not in benutzt]
+                      if not schon_benutzt(m["title"], benutzt)]
         random.shuffle(mitglieder)
         titel.update(mitglieder[:2])
     if not titel:   # Notfall: zufaellige Artikel
@@ -957,7 +968,7 @@ STIMMUNG_SUCHE = {
     "dramatisch": ["dramatic cinematic", "emotional orchestral", "drama underscore"],
     "froehlich": ["upbeat happy", "cheerful acoustic", "fun background"],
     "episch": ["epic orchestral", "cinematic adventure", "inspiring epic"],
-    "historisch": ["medieval", "baroque", "classical documentary", "historical cinematic"],
+    "historisch": ["medieval instrumental", "baroque instrumental", "classical piano", "historical cinematic"],
     "kurios": ["quirky", "playful pizzicato", "funny background"],
     "ruhig": ["calm ambient", "relaxing piano", "chill lofi"],
 }
@@ -998,7 +1009,8 @@ def _openverse(q, nur_musik=True):
              "tags": ", ".join(x.get("name", "") for x in (t.get("tags") or [])[:6]),
              "dauer": int((t.get("duration") or 0) / 1000)}
             for t in alle if t.get("license") in ("cc0", "by", "by-sa", "pdm") and t.get("url")
-            and ((t.get("duration") or 60000) >= 40000)]
+            and ((t.get("duration") or 60000) >= 40000)
+            and not _verboten(t.get("title", ""), " ".join(x.get("name", "") for x in (t.get("tags") or [])))]
 
 
 def _nachweis(t):
@@ -1012,7 +1024,7 @@ ARCHIV_THEMEN = {
     "dramatisch": ["cinematic", "orchestral", "soundtrack", "dramatic"],
     "froehlich": ["acoustic", "happy", "folk", "ukulele"],
     "episch": ["orchestral", "epic", "cinematic", "soundtrack"],
-    "historisch": ["classical", "baroque", "medieval", "piano"],
+    "historisch": ["classical", "baroque", "medieval", "harpsichord", "orchestral"],
     "kurios": ["quirky", "jazz", "acoustic", "chiptune"],
     "ruhig": ["ambient", "piano", "chill", "lofi"],
 }
@@ -1021,12 +1033,58 @@ ARCHIV_LIZENZ = ('(licenseurl:*publicdomain/zero* OR licenseurl:*publicdomain/ma
                  'licenseurl:*licenses/by/* OR licenseurl:*licenses/by-sa/*)')
 
 
+# Alles, was nach Sprache/Gesang klingt, fliegt raus
+VERBOTEN = ["speech", "spoken", "vocal", "vocals", "voice", "singer", "song", "lyrics", "rap", "hip hop", "hiphop",
+            "lecture", "audiobook", "podcast", "radio", "interview", "poetry", "poem", "propaganda", "rede",
+            "hörspiel", "hoerspiel", "sermon", "preaching", "news", "broadcast", "ww2", "wwii", "war speech",
+            "hitler", "nazi", "politic", "choir", "chant", "a cappella", "acapella", "opera", "karaoke"]
+VERBOTEN_SUCHE = " OR ".join(f'"{v}"' for v in VERBOTEN)
+INSTRUMENTAL_BONUS = ["instrumental", "ambient", "piano", "orchestral", "cinematic", "soundtrack", "lofi", "chill"]
+
+
+def _verboten(*texte):
+    t = " ".join(str(x) for x in texte).lower()
+    return any(re.search(rf"\b{re.escape(v)}", t) for v in VERBOTEN)
+
+
+def hat_stimme(pfad):
+    """Hoert mit der Spracherkennung in den Track rein. Erkennt sie Woerter -> Gesang/Sprache -> raus."""
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError:
+        return False                               # ohne Spracherkennung koennen wir es nicht pruefen
+    probe = WORK / "musik_probe.wav"
+    try:
+        laenge = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
+                                       "csv=p=0", str(pfad)], capture_output=True, text=True).stdout or 0)
+        woerter = 0
+        for start in (min(15, laenge * 0.1), laenge * 0.45, max(0, laenge * 0.75)):
+            ffmpeg("-ss", f"{start:.1f}", "-t", "25", "-i", pfad, "-ar", "16000", "-ac", "1", probe)
+            global _WHISPER
+            if "_WHISPER" not in globals() or _WHISPER is None:
+                _WHISPER = WhisperModel(os.environ.get("WHISPER_MODELL", "base"), device="cpu", compute_type="int8")
+            segmente, _ = _WHISPER.transcribe(str(probe), vad_filter=True, beam_size=1)
+            for seg in segmente:
+                if seg.no_speech_prob < 0.5 and seg.avg_logprob > -1.0:
+                    woerter += len(seg.text.split())
+            if woerter >= 5:
+                return True
+        return False
+    except Exception as e:
+        log(f"   Stimmen-Check nicht moeglich ({e.__class__.__name__})")
+        return False
+
+
+_WHISPER = None
+
+
 def _archive(themen):
     """Internet Archive (archive.org): riesige, zuverlaessige Sammlung freier Musik (Netlabels), ohne Key."""
     teil = " OR ".join(f'"{t}"' for t in themen)
     try:
         r = requests.get("https://archive.org/advancedsearch.php", headers=WIKI_HEADERS, timeout=40, params={
-            "q": f"mediatype:audio AND collection:(netlabels OR opensource_audio OR audio_music) AND subject:({teil})",
+            "q": (f"mediatype:audio AND collection:netlabels AND subject:({teil}) AND NOT subject:({VERBOTEN_SUCHE}) "
+                  f"AND NOT title:({VERBOTEN_SUCHE})"),
             "fl[]": ["identifier", "title", "creator", "licenseurl", "subject"],
             "rows": 100, "sort[]": "downloads desc", "output": "json"})
         if r.status_code != 200:
@@ -1050,6 +1108,8 @@ def _archive(themen):
         version = (re.search(r"/(\d\.\d)", lic) or [None, ""])[1]
         subj = d.get("subject", "")
         creator = d.get("creator") or "unbekannt"
+        if _verboten(d.get("title", ""), subj):
+            continue
         out.append({"id": f"ia_{d['identifier']}", "archive_id": d["identifier"], "url": None,
                     "title": d.get("title") or d["identifier"],
                     "creator": creator if isinstance(creator, str) else ", ".join(creator[:2]),
@@ -1114,8 +1174,14 @@ def _laden(t):
         log(f"   ✗ {t['title'][:50]}: Datei nicht abspielbar")
         ziel.unlink(missing_ok=True)
         return None
+    if hat_stimme(ziel):
+        log(f"   ✗ {t['title'][:50]}: enthaelt Stimme/Gesang -> aussortiert")
+        ziel.unlink(missing_ok=True)
+        _merke_musik(t["id"])                      # nie wieder vorschlagen
+        return None
     index = _lade_json(MUSIK_CACHE / "index.json") or {}
-    index[ziel.name] = {"nachweis": _nachweis(t), "stimmung": t.get("_stimmung", ""), "tags": t.get("tags", "")}
+    index[ziel.name] = {"nachweis": _nachweis(t), "stimmung": t.get("_stimmung", ""), "tags": t.get("tags", ""),
+                        "ohne_stimme": True}
     for alt in list(index)[:-MUSIK_CACHE_MAX]:
         (MUSIK_CACHE / alt).unlink(missing_ok=True)
         index.pop(alt, None)
@@ -1153,7 +1219,8 @@ def musik_waehlen(daten):
             auswahl = "\n".join(f"{i}: {t['title'][:70]} | {t['tags'][:60]}" for i, t in enumerate(liste))
             prompt = f"""Du bist Musik-Supervisor fuer einen YouTube-Short ueber: "{daten.get('titel')}" ({daten.get('thema')}).
 Gewuenschte Stimmung: {label}. Die Musik laeuft LEISE unter einer Erzaehlstimme.
-Waehle die 4 passendsten Tracks/Alben (Atmosphaere, Epoche, Tempo). Meide Gesang, Rap, Hoerspiele,
+Waehle die 4 passendsten Tracks/Alben (Atmosphaere, Epoche, Tempo). NUR reine Instrumentalmusik!
+Absolut verboten: Gesang, Sprache, Reden, Rap, Hoerspiele, Nachrichten, historische Tonaufnahmen,
 Podcasts, Lesungen, Weihnachtslieder, Noise und Field-Recordings.
 
 {auswahl}
@@ -1174,6 +1241,12 @@ Antworte NUR mit JSON: {{"auswahl": [Nummer1, Nummer2, Nummer3, Nummer4], "warum
                 return pfad
 
     index = _lade_json(MUSIK_CACHE / "index.json") or {}
+    for n, i in list(index.items()):
+        if not i.get("ohne_stimme"):               # alte, ungepruefte Tracks raus
+            (MUSIK_CACHE / n).unlink(missing_ok=True)
+            index.pop(n)
+    if MUSIK_CACHE.exists():
+        (MUSIK_CACHE / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=1), encoding="utf-8")
     archiv = [(n, i) for n, i in index.items() if (MUSIK_CACHE / n).exists()]
     if archiv:
         ruhig = [a for a in archiv if a[1].get("stimmung") == "ruhig"] or archiv
