@@ -30,8 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Code holen
+      - name: Code holen (immer der neueste Stand)
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Python einrichten
         uses: actions/setup-python@v5
