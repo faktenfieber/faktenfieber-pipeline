@@ -362,7 +362,8 @@ Antworte NUR mit JSON:
   "szenen": [{{"text": "...", "bild": null, "suchbegriff_en": "..."}}],
   "behauptungen": [{{"aussage": "...", "beleg": "woertliches Zitat aus dem Artikel"}}],
   "beschreibung": "2-3 Saetze, erzaehlt neugierig weiter, endet mit Aufforderung zum Folgen",
-  "hashtags": ["#fakten", "#wusstestdu", "..."]
+  "hashtags": ["#fakten", "#wusstestdu", "..."],
+  "musik_stimmung": "eins von: spannend, mysterioes, dramatisch, froehlich, episch, ruhig, kurios"
 }}"""
     daten, modell = ki(prompt, temperatur=0.8)
     daten["thema"] = titel
@@ -598,7 +599,7 @@ def wort_zeiten(wav, woerter):
 
 
 # ---------------------------------------------------------------- Untertitel
-def chunk_grenzen(woerter, max_woerter=3, max_zeichen=18):
+def chunk_grenzen(woerter, max_woerter=3, max_zeichen=16):
     """Teilt eine Wortliste in Untertitel-Haeppchen, gibt Listen von Indizes zurueck."""
     out, akt = [], []
     for i, w in enumerate(woerter):
@@ -624,6 +625,23 @@ def ass_escape(t):
     return t.replace("\\", "").replace("{", "(").replace("}", ")")
 
 
+FONT_DATEI = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+MAX_TEXTBREITE = W - 140          # Rand links/rechts inkl. Umrandung
+
+
+def schriftgroesse(text, basis):
+    """Verkleinert die Schrift, bis der Text sicher in eine Zeile passt (lange deutsche Woerter!)."""
+    try:
+        from PIL import ImageFont
+        font = ImageFont.truetype(FONT_DATEI, basis)
+        breite = font.getlength(text) + 16          # + Umrandung
+    except Exception:
+        breite = len(text) * basis * 0.72           # Schaetzung ohne Pillow
+    if breite <= MAX_TEXTBREITE:
+        return basis
+    return max(44, int(basis * MAX_TEXTBREITE / breite))
+
+
 def untertitel_schreiben(eintraege, ziel):
     """eintraege = [(text, start, ende, ist_hook)]"""
     kopf = f"""[Script Info]
@@ -640,9 +658,13 @@ Style: Hook,{FONT},100,&H0000E1FF,&H0000E1FF,&H00000000,&H96000000,-1,0,0,0,100,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    pop = r"{\an5\pos(540,1180)\fscx82\fscy82\t(0,90,\fscx100\fscy100)}"
-    zeilen = [f"Dialogue: 0,{ass_zeit(s)},{ass_zeit(e)},{'Hook' if hook else 'Main'},,0,0,0,,{pop}{ass_escape(t.upper())}"
-              for t, s, e, hook in eintraege]
+    zeilen = []
+    for t, s, e, hook in eintraege:
+        text = ass_escape(t.upper())
+        basis = 100 if hook else 92
+        groesse = schriftgroesse(text, basis)
+        pop = (f"{{\\an5\\pos(540,1180)\\fs{groesse}\\fscx82\\fscy82\\t(0,90,\\fscx100\\fscy100)}}")
+        zeilen.append(f"Dialogue: 0,{ass_zeit(s)},{ass_zeit(e)},{'Hook' if hook else 'Main'},,0,0,0,,{pop}{text}")
     Path(ziel).write_text(kopf + "\n".join(zeilen) + "\n", encoding="utf-8")
 
 
@@ -707,6 +729,145 @@ def bild_rendern(bild, dauer, ziel, nummer):
            f"zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s={W}x{H}:fps={FPS},"
            f"setsar=1,format=yuv420p", "-frames:v", frames,
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", ziel)
+
+
+# ---------------------------------------------------------------- Musik + Soundeffekte
+MUSIK_ORDNER = ROOT / "musik"                    # optional: eigene Tracks (z. B. von Pixabay Music) hier ablegen
+USED_MUSIK = ROOT / "data" / "used_music.json"
+MUSIK_LAUTSTAERKE = float(os.environ.get("MUSIK_LAUTSTAERKE", "0.20"))
+SFX_LAUTSTAERKE = float(os.environ.get("SFX_LAUTSTAERKE", "0.35"))
+STIMMUNG_SUCHE = {
+    "spannend": ["suspense cinematic", "tension background", "thriller underscore"],
+    "mysterioes": ["mystery ambient", "dark ambient", "mysterious"],
+    "dramatisch": ["dramatic cinematic", "epic drama", "dark orchestral"],
+    "froehlich": ["upbeat happy", "fun ukulele", "cheerful"],
+    "episch": ["epic orchestral", "cinematic trailer", "inspiring epic"],
+    "ruhig": ["calm piano", "ambient chill", "lofi"],
+    "kurios": ["quirky funny", "playful pizzicato", "comedy background"],
+}
+MUSIKNACHWEIS = ""
+
+
+def _lade_json(pfad):
+    try:
+        return json.loads(pfad.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def musik_waehlen(stimmung):
+    """Eigener Ordner zuerst (wechselt jedes Mal), sonst automatisch frei lizenzierte Musik von Openverse."""
+    global MUSIKNACHWEIS
+    zuletzt = _lade_json(USED_MUSIK)[-12:]
+    endungen = ("*.mp3", "*.wav", "*.m4a", "*.ogg")
+    eigene = [p for e in endungen for p in MUSIK_ORDNER.glob(f"**/{e}")] if MUSIK_ORDNER.exists() else []
+    if eigene:
+        passend = [p for p in eigene if stimmung and stimmung in str(p.parent).lower()] or eigene
+        frisch = [p for p in passend if p.name not in zuletzt] or passend
+        wahl = random.choice(frisch)
+        _merke_musik(wahl.name)
+        MUSIKNACHWEIS = ""
+        log(f"Musik (eigener Ordner): {wahl.name}")
+        return wahl
+
+    for q in random.sample(STIMMUNG_SUCHE.get(stimmung, STIMMUNG_SUCHE["spannend"]), 3):
+        try:
+            r = requests.get("https://api.openverse.org/v1/audio/", headers=WIKI_HEADERS, timeout=30, params={
+                "q": q, "license_type": "commercial,modification", "category": "music", "page_size": 40})
+            treffer = [t for t in r.json().get("results", [])
+                       if t.get("license") in ("cc0", "by", "by-sa", "pdm") and (t.get("duration") or 0) >= 45000
+                       and t.get("url") and t.get("id") not in zuletzt]
+        except Exception as e:
+            log(f"Openverse nicht erreichbar: {e}")
+            continue
+        random.shuffle(treffer)
+        for t in treffer[:5]:
+            try:
+                daten = requests.get(t["url"], headers=WIKI_HEADERS, timeout=60).content
+            except requests.RequestException:
+                continue
+            if len(daten) < 200_000:
+                continue
+            ziel = WORK / "musik_download.mp3"
+            ziel.write_bytes(daten)
+            _merke_musik(t["id"])
+            lizenz = f"CC {t['license'].upper()} {t.get('license_version') or ''}".strip()
+            if t["license"] in ("cc0", "pdm"):
+                lizenz = "gemeinfrei (CC0)"
+            MUSIKNACHWEIS = f"„{t.get('title', 'Ohne Titel')}“ von {t.get('creator') or 'unbekannt'} – {lizenz} – {t.get('foreign_landing_url', '')}"
+            log(f"Musik ({stimmung}): {MUSIKNACHWEIS}")
+            return ziel
+    log("Keine Musik gefunden, Video ohne Musik.")
+    MUSIKNACHWEIS = ""
+    return None
+
+
+def _merke_musik(kennung):
+    liste = _lade_json(USED_MUSIK)
+    liste.append(kennung)
+    USED_MUSIK.parent.mkdir(parents=True, exist_ok=True)
+    USED_MUSIK.write_text(json.dumps(liste[-50:], ensure_ascii=False), encoding="utf-8")
+
+
+def sfx_erzeugen():
+    """Soundeffekte werden selbst erzeugt -> keinerlei Lizenzprobleme."""
+    sfx = {
+        "whoosh": "anoisesrc=d=0.5:c=pink:a=0.9,highpass=f=500,lowpass=f=5000,"
+                  "afade=t=in:d=0.18,afade=t=out:st=0.2:d=0.3",
+        "pop": "sine=f=1100:d=0.09,afade=t=out:st=0.02:d=0.07",
+        "impact": "sine=f=55:d=0.9,afade=t=out:st=0.05:d=0.85,volume=2.2",
+        "riser": "anoisesrc=d=1.2:c=white:a=0.6,highpass=f=1500,afade=t=in:d=1.1,afade=t=out:st=1.1:d=0.1",
+    }
+    pfade = {}
+    for name, filt in sfx.items():
+        p = WORK / f"sfx_{name}.wav"
+        ffmpeg("-f", "lavfi", "-i", filt, "-ar", "44100", "-ac", "1", p)
+        pfade[name] = p
+    return pfade
+
+
+def audio_mischen(stimme, musik, gesamt, schnitt_zeiten, twist_zeit, ziel):
+    """Stimme + Musik (duckt automatisch unter der Stimme) + leise Soundeffekte."""
+    sfx = sfx_erzeugen()
+    eingaben = ["-i", stimme]
+    filter_teile = ["[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[stimme][sc]"]
+    mix = ["[stimme]"]
+    n = 1
+    if musik:
+        eingaben += ["-stream_loop", "-1", "-i", musik]
+        filter_teile.append(
+            f"[{n}:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:{gesamt:.2f},"
+            f"volume={MUSIK_LAUTSTAERKE},afade=t=in:d=0.8,afade=t=out:st={max(0, gesamt - 1.8):.2f}:d=1.8[m];"
+            f"[m][sc]sidechaincompress=threshold=0.04:ratio=6:attack=15:release=350[musik]")
+        mix.append("[musik]")
+        n += 1
+    else:
+        filter_teile.append("[sc]anullsink")
+
+    ereignisse = [("pop", 0.05)] + [("whoosh", max(0, t - 0.25)) for t in schnitt_zeiten]
+    if twist_zeit:
+        ereignisse += [("riser", max(0, twist_zeit - 1.2)), ("impact", twist_zeit)]
+    zaehler = {}
+    for name, t in ereignisse:
+        zaehler[name] = zaehler.get(name, 0) + 1
+    index = {}
+    for name in zaehler:
+        eingaben += ["-i", sfx[name]]
+        index[name] = n
+        filter_teile.append(f"[{n}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
+                            f"asplit={zaehler[name]}" + "".join(f"[{name}{k}]" for k in range(zaehler[name])))
+        n += 1
+    benutzt = {}
+    for name, t in ereignisse:
+        k = benutzt.get(name, 0)
+        benutzt[name] = k + 1
+        ms = int(t * 1000)
+        filter_teile.append(f"[{name}{k}]adelay={ms}|{ms},volume={SFX_LAUTSTAERKE}[e_{name}{k}]")
+        mix.append(f"[e_{name}{k}]")
+    filter_teile.append(f"{''.join(mix)}amix=inputs={len(mix)}:normalize=0:duration=first,"
+                        f"apad=whole_dur={gesamt:.2f},loudnorm=I=-14:TP=-1.5:LRA=11,alimiter=limit=0.95[out]")
+    ffmpeg(*eingaben, "-filter_complex", ";".join(filter_teile), "-map", "[out]", "-t", f"{gesamt:.2f}",
+           "-ar", "44100", ziel)
 
 
 # ---------------------------------------------------------------- Video bauen
@@ -799,10 +960,21 @@ def video_bauen(daten):
     liste.write_text("".join(f"file '{p.resolve()}'\n" for p in segmente))
     ffmpeg("-f", "concat", "-safe", "0", "-i", liste, "-c", "copy", WORK / "bild.mp4")
 
-    # 4) Alles zusammen + Untertitel einbrennen (hochkant 1080x1920, 9:16)
+    # 4) Ton: Stimme + Musik + Soundeffekte
+    try:
+        musik = musik_waehlen(str(daten.get("musik_stimmung", "spannend")).lower())
+        twist = starts[-1] if len(starts) > 2 else None
+        audio_mischen(WORK / "voice.wav", musik, ende_gesamt, starts[1:], twist, WORK / "ton.wav")
+        ton = WORK / "ton.wav"
+        daten["musiknachweis"] = MUSIKNACHWEIS
+    except Exception as e:
+        log(f"⚠️ Musik/Sounds fehlgeschlagen ({e}), nehme nur die Stimme.")
+        ton = WORK / "voice.wav"
+
+    # 5) Alles zusammen + Untertitel einbrennen (hochkant 1080x1920, 9:16)
     final = OUT / "faktenfieber.mp4"
     subs = str((WORK / "subs.ass").resolve()).replace(":", r"\:")
-    ffmpeg("-i", WORK / "bild.mp4", "-i", WORK / "voice.wav",
+    ffmpeg("-i", WORK / "bild.mp4", "-i", ton,
            "-vf", f"ass='{subs}',setsar=1,setdar=9/16", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest",
            "-movflags", "+faststart", final)
@@ -830,6 +1002,7 @@ def telegram_senden(video, daten, check, dauer):
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
             f"Quelle: {daten['quellen'][0]}\n"
             + (("Bilder: " + "; ".join(daten.get("bildnachweise", [])) + "\n") if daten.get("bildnachweise") else "")
+            + ((f"Musik: {daten['musiknachweis']}\n") if daten.get("musiknachweis") else "")
             + f"\n{' '.join(daten.get('hashtags', []))}\n\n"
             f"🔎 FAKTENCHECK (Prüfer: {check.get('pruefer', '?')})\n{pruef}\n\n"
             f"🤖 Geschrieben von: {daten.get('_modell')}\n🎙 Stimme: {STIMME_GENUTZT}")
@@ -847,6 +1020,8 @@ def youtube_beschreibung(daten):
     teile = [daten.get("beschreibung", ""), "", f"📚 Quelle: {daten['quellen'][0]}"]
     if daten.get("bildnachweise"):
         teile += ["", "📸 Bildnachweise:"] + [f"• {b}" for b in daten["bildnachweise"]]
+    if daten.get("musiknachweis"):
+        teile += ["", f"🎵 Musik: {daten['musiknachweis']}"]
     teile += ["", " ".join(daten.get("hashtags", [])) + " #shorts"]
     return "\n".join(teile).replace("<", "").replace(">", "")[:4900]
 
