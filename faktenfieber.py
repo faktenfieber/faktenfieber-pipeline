@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v1.0
+FAKTENFIEBER – Pipeline v1.6
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -27,7 +27,7 @@ WORK = ROOT / "work"
 USED_FILE = ROOT / "data" / "used_topics.json"
 
 W, H, FPS = 1080, 1920, 30
-MAX_DAUER = 58.0                       # Sekunden, Shorts bleiben unter 60
+MAX_DAUER = 50.0                       # Sekunden: kurz = hoehere Durchschaurate
 MAX_SEGMENT = float(os.environ.get("SCHNITT_SEKUNDEN", "3.0"))   # spaetestens alle X s ein neues Bild
 VOICE_NAME = os.environ.get("PIPER_VOICE", "de_DE-thorsten-high")
 LENGTH_SCALE = float(os.environ.get("VOICE_SPEED", "0.92"))   # <1 = schneller
@@ -212,24 +212,49 @@ def wiki(**params):
     return r.json()
 
 
-def wiki_kandidaten(benutzt, anzahl=7):
+# Schwerpunkt: Geschichte, wie Menschen frueher lebten, kuriose Ereignisse, unnuetzes Wissen
+THEMEN_SUCHE = [
+    "Mittelalter Alltag", "Antike Rom", "Altes Ägypten", "Wikinger", "Ritter", "Steinzeit", "Pest",
+    "Brauch", "Aberglaube", "Hinrichtung", "Gefängnis Geschichte", "Erfindung", "Patent", "Kuriosität",
+    "Hochstapler", "Fälschung", "Schwindel", "Unglück", "Katastrophe", "Explosion", "Schiffbruch",
+    "Expedition", "Entdeckung", "Medizin Geschichte", "Hygiene", "Mode Geschichte", "Essen Geschichte",
+    "Bier Geschichte", "Geld Geschichte", "Post Geschichte", "Eisenbahn Geschichte", "Krieg Kuriosität",
+    "Spionage", "Schmuggel", "Piraterie", "Raub", "Kriminalfall", "Gesetz", "Kaiser", "König", "Papst",
+    "Industrialisierung", "19. Jahrhundert", "Barock", "Renaissance", "Zirkus", "Jahrmarkt", "Spiel Geschichte",
+    "Tier Rekord", "Naturphänomen", "Rekord", "Weltausstellung", "Kunstraub", "Ballon", "Zeppelin",
+]
+KATEGORIE_SUCHE = "incategory:Wikipedia:Exzellent|Wikipedia:Lesenswert"
+
+
+def wiki_kandidaten(benutzt, anzahl=10):
     titel = set()
-    for _ in range(6):
-        kat = random.choice(WIKI_KATEGORIEN)
-        prefix = random.choice(string.ascii_uppercase)
-        daten = wiki(list="categorymembers", cmtitle=kat, cmlimit=50, cmnamespace=0,
-                     cmstartsortkeyprefix=prefix)
-        mitglieder = [m["title"] for m in daten.get("query", {}).get("categorymembers", [])]
-        random.shuffle(mitglieder)
-        titel.update(t for t in mitglieder[:4] if t not in benutzt)
+    # ~3/4 gezielt aus Geschichte & unnuetzem Wissen, Rest zufaellig quer durch alles
+    for begriff in random.sample(THEMEN_SUCHE, 5):
+        try:
+            daten = wiki(list="search", srsearch=f"{KATEGORIE_SUCHE} {begriff}", srlimit=20, srnamespace=0)
+            treffer = [t["title"] for t in daten.get("query", {}).get("search", []) if t["title"] not in benutzt]
+        except Exception as e:
+            log(f"Wiki-Suche '{begriff}' fehlgeschlagen: {e}")
+            treffer = []
+        random.shuffle(treffer)
+        titel.update(treffer[:2])
+    for _ in range(4):
         if len(titel) >= anzahl:
             break
+        kat = random.choice(WIKI_KATEGORIEN)
+        daten = wiki(list="categorymembers", cmtitle=kat, cmlimit=50, cmnamespace=0,
+                     cmstartsortkeyprefix=random.choice(string.ascii_uppercase))
+        mitglieder = [m["title"] for m in daten.get("query", {}).get("categorymembers", [])
+                      if m["title"] not in benutzt]
+        random.shuffle(mitglieder)
+        titel.update(mitglieder[:2])
     if not titel:   # Notfall: zufaellige Artikel
         daten = wiki(list="random", rnnamespace=0, rnlimit=anzahl)
         titel = {m["title"] for m in daten["query"]["random"]}
     titel = list(titel)[:anzahl]
+    random.shuffle(titel)
     intros = wiki(prop="extracts", exintro=1, explaintext=1, exlimit=20, titles="|".join(titel))
-    return {p["title"]: p.get("extract", "")[:350] for p in intros["query"]["pages"] if p.get("extract")}
+    return {p["title"]: p.get("extract", "")[:300] for p in intros["query"]["pages"] if p.get("extract")}
 
 
 def wiki_artikel(titel):
@@ -304,7 +329,10 @@ def thema_waehlen(benutzt):
     prompt = f"""Du bist Redakteur des deutschen Shorts-Kanals FAKTENFIEBER (verrueckte, wahre Fakten und Geschichten).
 Hier sind Wikipedia-Artikel. Waehle den EINEN, aus dem sich das spannendste 45-Sekunden-Video
 fuer ein breites, junges Publikum machen laesst (ueberraschend, kurios, "das glaubt mir keiner").
-Bevorzuge ECHTE Ereignisse, Phaenomene, Tiere, Orte, Erfindungen, Kriminalfaelle, Katastrophen, Kuriositaeten.
+SCHWERPUNKT DES KANALS: Geschichte und wie die Menschen frueher gelebt haben (Alltag, Braeuche, Berufe,
+Strafen, Medizin, Essen, Aberglaube), kuriose historische Ereignisse, verrueckte Erfindungen und
+"unnuetzes Wissen", das man sofort weitererzaehlen will. Daneben auch erstaunliche Fakten aus Natur und Wissenschaft.
+Bevorzuge ECHTE Ereignisse, Phaenomene, Orte, Erfindungen, Kriminalfaelle, Katastrophen, Kuriositaeten.
 Meiden: Romane, Filme, Alben, Fiktion, Verwaltung, Listen, Kirchen/Gebaeude ohne Story, Biografien ohne Twist.
 "spannung" ehrlich bewerten: 9-10 nur, wenn ein konkreter Fakt wirklich verblueffend ist.
 
@@ -337,15 +365,24 @@ ECHTE BILDER AUS DEM ARTIKEL (Nummer: Beschreibung):
 {bildliste}
 
 STIL:
-- 110 bis 140 Woerter gesprochener Text (ca. 45-55 Sekunden).
+- 85 bis 110 Woerter gesprochener Text (ca. 35-45 Sekunden). Kurz und knackig, jedes Wort muss sitzen.
 - Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook mit dem ueberraschendsten Detail.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
   Roter Faden, jeder Satz baut auf dem vorherigen auf, nichts Unverstaendliches, keine Fachbegriffe ohne Erklaerung.
 - Aufbau: Hook -> Einordnung (was/wo/wann) -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
+- Bei historischen Themen: Lass den Zuschauer spueren, wie anders das Leben damals war (Vergleich mit heute,
+  aber nur mit Fakten aus dem Artikel). Ton: "unnuetzes Wissen", das man beim naechsten Treffen erzaehlen will.
 - Kurze, lebendige Saetze, Du-Ansprache, locker aber nicht cringe. Keine Emojis, keine Klammern,
   keine Abkuerzungen, keine Sonderzeichen. Der Text wird von einer Computerstimme vorgelesen.
-- 9 bis 13 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
+- 8 bis 12 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
+- VIRAL-REGELN:
+  * Der erste Satz enthaelt SOFORT den krassesten Fakt. Kein Anlauf, keine Einleitung.
+  * Offene Schleife: Im 2. oder 3. Satz andeuten, dass noch etwas Verrueckteres kommt
+    (z. B. "Aber das ist noch nicht mal das Verrueckteste."), und es am Ende wirklich liefern.
+  * Loop-Ende: Der LETZTE Satz ist so formuliert, dass er nahtlos in den ERSTEN Satz uebergeht,
+    wenn das Video von vorne startet (z. B. endet mit "... und genau deshalb fragen sich heute noch viele:").
+    KEIN "Folg mir", kein "Abonnieren", keine Verabschiedung im gesprochenen Text.
 - Pro Szene das passende Bild:
   "bild": Nummer eines ECHTEN Bildes aus der Liste oben, wenn es genau zu diesem Satz passt (sonst null).
           Nutze die echten Bilder moeglichst oft, vor allem fuer das Hauptthema und den Hook.
@@ -363,7 +400,9 @@ Antworte NUR mit JSON:
   "behauptungen": [{{"aussage": "...", "beleg": "woertliches Zitat aus dem Artikel"}}],
   "beschreibung": "2-3 Saetze, erzaehlt neugierig weiter, endet mit Aufforderung zum Folgen",
   "hashtags": ["#fakten", "#wusstestdu", "..."],
-  "musik_stimmung": "eins von: spannend, mysterioes, dramatisch, froehlich, episch, ruhig, kurios"
+  "musik_stimmung": "eins von: spannend, mysterioes, dramatisch, froehlich, episch, historisch, kurios, ruhig",
+  "hook_text": "Texteinblendung fuer die ersten 3 Sekunden: max. 6 Woerter, der krasseste Fakt, wahr laut Artikel",
+  "kommentar_frage": "kurze Frage an die Zuschauer fuer die Kommentare, passend zum Thema"
 }}"""
     daten, modell = ki(prompt, temperatur=0.8)
     daten["thema"] = titel
@@ -408,6 +447,8 @@ def faktencheck(daten):
 
     # Stufe 2: Eine (moeglichst andere) KI vergleicht den Sprechtext mit dem Artikel
     sprechtext = " ".join(s["text"] for s in daten["szenen"])
+    if daten.get("hook_text"):
+        sprechtext = f"[Texteinblendung: {daten['hook_text']}] " + sprechtext
     autor = daten["_modell"]
     prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit dem ARTIKEL.
 Jede FAKTENAUSSAGE im Sprechtext muss durch den Artikel gedeckt sein.
@@ -443,7 +484,7 @@ def reparieren(daten, ergebnis):
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
-Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 100 bis 140 Woerter. Felder "bild" beibehalten.
+Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 85 bis 110 Woerter. Felder "bild", "hook_text" und "kommentar_frage" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
@@ -642,29 +683,62 @@ def schriftgroesse(text, basis):
     return max(44, int(basis * MAX_TEXTBREITE / breite))
 
 
-def untertitel_schreiben(eintraege, ziel):
-    """eintraege = [(text, start, ende, ist_hook)]"""
+GELB = "&H0000E1FF&"
+WEISS = "&H00FFFFFF&"
+
+
+def hook_umbruch(text, max_zeichen=16):
+    """Hook-Text auf max. 2-3 Zeilen verteilen."""
+    zeilen, akt = [], ""
+    for w in text.split():
+        if akt and len(akt) + 1 + len(w) > max_zeichen:
+            zeilen.append(akt)
+            akt = w
+        else:
+            akt = f"{akt} {w}".strip()
+    if akt:
+        zeilen.append(akt)
+    return zeilen[:3]
+
+
+def untertitel_schreiben(eintraege, ziel, hook_text="", hook_dauer=3.0):
+    """eintraege = [(woerter=[(wort, start, ende)], start, ende)]
+    Karaoke-Stil: das gerade gesprochene Wort leuchtet gelb. Oben zusaetzlich der Hook-Text."""
     kopf = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
 PlayResY: {H}
-WrapStyle: 0
+WrapStyle: 2
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Main,{FONT},92,&H00FFFFFF,&H00FFFFFF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,7,4,5,60,60,0,1
-Style: Hook,{FONT},100,&H0000E1FF,&H0000E1FF,&H00000000,&H96000000,-1,0,0,0,100,100,0,0,1,8,4,5,60,60,0,1
+Style: Hook,{FONT},84,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,3,18,0,8,60,60,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     zeilen = []
-    for t, s, e, hook in eintraege:
-        text = ass_escape(t.upper())
-        basis = 100 if hook else 92
-        groesse = schriftgroesse(text, basis)
-        pop = (f"{{\\an5\\pos(540,1180)\\fs{groesse}\\fscx82\\fscy82\\t(0,90,\\fscx100\\fscy100)}}")
-        zeilen.append(f"Dialogue: 0,{ass_zeit(s)},{ass_zeit(e)},{'Hook' if hook else 'Main'},,0,0,0,,{pop}{text}")
+    # Hook-Text oben (weiss auf schwarzem Balken, krasser Fakt sofort sichtbar)
+    if hook_text:
+        hz = [ass_escape(z.upper()) for z in hook_umbruch(hook_text)]
+        groesse = min(schriftgroesse(z, 84) for z in hz)
+        txt = r"\N".join(hz)
+        zeilen.append(f"Dialogue: 1,{ass_zeit(0)},{ass_zeit(hook_dauer)},Hook,,0,0,0,,"
+                      f"{{\\an8\\pos(540,250)\\fs{groesse}\\fscx70\\fscy70\\t(0,120,\\fscx100\\fscy100)"
+                      f"\\fad(0,250)}}{txt}")
+    for woerter, s_chunk, e_chunk in eintraege:
+        roh = [ass_escape(w.upper()) for w, _, _ in woerter]
+        groesse = schriftgroesse(" ".join(roh), 92)
+        for k, (w, ws, we) in enumerate(woerter):
+            start = s_chunk if k == 0 else ws
+            ende = woerter[k + 1][1] if k + 1 < len(woerter) else e_chunk
+            if ende <= start:
+                continue
+            text = " ".join((f"{{\\c{GELB}}}{x}{{\\c{WEISS}}}" if j == k else x) for j, x in enumerate(roh))
+            anim = r"\fscx82\fscy82\t(0,90,\fscx100\fscy100)" if k == 0 else ""
+            zeilen.append(f"Dialogue: 0,{ass_zeit(start)},{ass_zeit(ende)},Main,,0,0,0,,"
+                          f"{{\\an5\\pos(540,1180)\\fs{groesse}{anim}}}{text}")
     Path(ziel).write_text(kopf + "\n".join(zeilen) + "\n", encoding="utf-8")
 
 
@@ -707,10 +781,15 @@ def ffmpeg(*args):
     subprocess.run(cmd, check=True)
 
 
-def szene_rendern(clip, dauer, ziel):
-    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1,"
-          f"fps={FPS},eq=brightness=-0.06:saturation=1.1")
-    ffmpeg("-stream_loop", "-1", "-i", clip, "-t", f"{dauer:.3f}", "-vf", vf, "-an",
+def szene_rendern(clip, dauer, ziel, nummer=0):
+    """Stock-Clip -> 9:16 mit leichtem Zoom (abwechselnd rein/raus), damit nie etwas stillsteht."""
+    W2, H2 = int(W * 1.15) // 2 * 2, int(H * 1.15) // 2 * 2
+    frames = max(1, int(dauer * FPS))
+    z = f"1+0.08*on/{frames}" if nummer % 2 == 0 else f"1.08-0.08*on/{frames}"
+    vf = (f"scale={W2}:{H2}:force_original_aspect_ratio=increase,crop={W2}:{H2},fps={FPS},"
+          f"zoompan=z='{z}':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={W}x{H}:fps={FPS},"
+          f"setsar=1,eq=brightness=-0.06:saturation=1.1")
+    ffmpeg("-stream_loop", "-1", "-i", clip, "-t", f"{dauer:.3f}", "-vf", vf, "-an", "-frames:v", frames,
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", ziel)
 
 
@@ -731,20 +810,22 @@ def bild_rendern(bild, dauer, ziel, nummer):
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", ziel)
 
 
-# ---------------------------------------------------------------- Musik + Soundeffekte
-MUSIK_ORDNER = ROOT / "musik"                    # optional: eigene Tracks (z. B. von Pixabay Music) hier ablegen
+# ---------------------------------------------------------------- Hintergrundmusik (die KI sucht aus)
+MUSIK_CACHE = ROOT / "data" / "musik"            # erfolgreich geladene Tracks werden hier gesammelt
+MUSIK_CACHE_MAX = 25
 USED_MUSIK = ROOT / "data" / "used_music.json"
 MUSIK_LAUTSTAERKE = float(os.environ.get("MUSIK_LAUTSTAERKE", "0.20"))
-SFX_LAUTSTAERKE = float(os.environ.get("SFX_LAUTSTAERKE", "0.35"))
 STIMMUNG_SUCHE = {
-    "spannend": ["suspense cinematic", "tension background", "thriller underscore"],
-    "mysterioes": ["mystery ambient", "dark ambient", "mysterious"],
-    "dramatisch": ["dramatic cinematic", "epic drama", "dark orchestral"],
-    "froehlich": ["upbeat happy", "fun ukulele", "cheerful"],
-    "episch": ["epic orchestral", "cinematic trailer", "inspiring epic"],
-    "ruhig": ["calm piano", "ambient chill", "lofi"],
-    "kurios": ["quirky funny", "playful pizzicato", "comedy background"],
+    "spannend": ["suspense cinematic", "tension underscore", "documentary suspense"],
+    "mysterioes": ["mystery ambient", "mysterious documentary", "dark ambient"],
+    "dramatisch": ["dramatic cinematic", "emotional orchestral", "drama underscore"],
+    "froehlich": ["upbeat happy", "cheerful acoustic", "fun background"],
+    "episch": ["epic orchestral", "cinematic adventure", "inspiring epic"],
+    "historisch": ["medieval", "baroque", "classical documentary", "historical cinematic"],
+    "kurios": ["quirky", "playful pizzicato", "funny background"],
+    "ruhig": ["calm ambient", "relaxing piano", "chill lofi"],
 }
+ENTSPANNT = ["calm ambient", "relaxing piano", "chill lofi", "soft acoustic", "ambient background"]
 MUSIKNACHWEIS = ""
 
 
@@ -752,122 +833,168 @@ def _lade_json(pfad):
     try:
         return json.loads(pfad.read_text(encoding="utf-8"))
     except Exception:
-        return []
-
-
-def musik_waehlen(stimmung):
-    """Eigener Ordner zuerst (wechselt jedes Mal), sonst automatisch frei lizenzierte Musik von Openverse."""
-    global MUSIKNACHWEIS
-    zuletzt = _lade_json(USED_MUSIK)[-12:]
-    endungen = ("*.mp3", "*.wav", "*.m4a", "*.ogg")
-    eigene = [p for e in endungen for p in MUSIK_ORDNER.glob(f"**/{e}")] if MUSIK_ORDNER.exists() else []
-    if eigene:
-        passend = [p for p in eigene if stimmung and stimmung in str(p.parent).lower()] or eigene
-        frisch = [p for p in passend if p.name not in zuletzt] or passend
-        wahl = random.choice(frisch)
-        _merke_musik(wahl.name)
-        MUSIKNACHWEIS = ""
-        log(f"Musik (eigener Ordner): {wahl.name}")
-        return wahl
-
-    for q in random.sample(STIMMUNG_SUCHE.get(stimmung, STIMMUNG_SUCHE["spannend"]), 3):
-        try:
-            r = requests.get("https://api.openverse.org/v1/audio/", headers=WIKI_HEADERS, timeout=30, params={
-                "q": q, "license_type": "commercial,modification", "category": "music", "page_size": 40})
-            treffer = [t for t in r.json().get("results", [])
-                       if t.get("license") in ("cc0", "by", "by-sa", "pdm") and (t.get("duration") or 0) >= 45000
-                       and t.get("url") and t.get("id") not in zuletzt]
-        except Exception as e:
-            log(f"Openverse nicht erreichbar: {e}")
-            continue
-        random.shuffle(treffer)
-        for t in treffer[:5]:
-            try:
-                daten = requests.get(t["url"], headers=WIKI_HEADERS, timeout=60).content
-            except requests.RequestException:
-                continue
-            if len(daten) < 200_000:
-                continue
-            ziel = WORK / "musik_download.mp3"
-            ziel.write_bytes(daten)
-            _merke_musik(t["id"])
-            lizenz = f"CC {t['license'].upper()} {t.get('license_version') or ''}".strip()
-            if t["license"] in ("cc0", "pdm"):
-                lizenz = "gemeinfrei (CC0)"
-            MUSIKNACHWEIS = f"„{t.get('title', 'Ohne Titel')}“ von {t.get('creator') or 'unbekannt'} – {lizenz} – {t.get('foreign_landing_url', '')}"
-            log(f"Musik ({stimmung}): {MUSIKNACHWEIS}")
-            return ziel
-    log("Keine Musik gefunden, Video ohne Musik.")
-    MUSIKNACHWEIS = ""
-    return None
+        return [] if pfad.suffix == ".json" and "used" in pfad.name else {}
 
 
 def _merke_musik(kennung):
-    liste = _lade_json(USED_MUSIK)
+    liste = _lade_json(USED_MUSIK) or []
     liste.append(kennung)
     USED_MUSIK.parent.mkdir(parents=True, exist_ok=True)
     USED_MUSIK.write_text(json.dumps(liste[-50:], ensure_ascii=False), encoding="utf-8")
 
 
-def sfx_erzeugen():
-    """Soundeffekte werden selbst erzeugt -> keinerlei Lizenzprobleme."""
-    sfx = {
-        "whoosh": "anoisesrc=d=0.5:c=pink:a=0.9,highpass=f=500,lowpass=f=5000,"
-                  "afade=t=in:d=0.18,afade=t=out:st=0.2:d=0.3",
-        "pop": "sine=f=1100:d=0.09,afade=t=out:st=0.02:d=0.07",
-        "impact": "sine=f=55:d=0.9,afade=t=out:st=0.05:d=0.85,volume=2.2",
-        "riser": "anoisesrc=d=1.2:c=white:a=0.6,highpass=f=1500,afade=t=in:d=1.1,afade=t=out:st=1.1:d=0.1",
-    }
-    pfade = {}
-    for name, filt in sfx.items():
-        p = WORK / f"sfx_{name}.wav"
-        ffmpeg("-f", "lavfi", "-i", filt, "-ar", "44100", "-ac", "1", p)
-        pfade[name] = p
-    return pfade
+def _openverse(q, nur_musik=True):
+    params = {"q": q, "license_type": "commercial,modification", "page_size": 30}
+    if nur_musik:
+        params["category"] = "music"
+    try:
+        r = requests.get("https://api.openverse.org/v1/audio/", headers=WIKI_HEADERS, timeout=30, params=params)
+        if r.status_code != 200:
+            log(f"Openverse antwortet {r.status_code}: {r.text[:150]}")
+            return []
+        alle = r.json().get("results", [])
+    except Exception as e:
+        log(f"Openverse nicht erreichbar: {e.__class__.__name__}")
+        return []
+    return [{"id": t["id"], "url": t["url"], "title": t.get("title") or "Ohne Titel",
+             "creator": t.get("creator") or "unbekannt", "license": t["license"],
+             "license_version": t.get("license_version") or "", "landing": t.get("foreign_landing_url") or "",
+             "tags": ", ".join(x.get("name", "") for x in (t.get("tags") or [])[:6]),
+             "dauer": int((t.get("duration") or 0) / 1000)}
+            for t in alle if t.get("license") in ("cc0", "by", "by-sa", "pdm") and t.get("url")
+            and ((t.get("duration") or 60000) >= 40000)]
 
 
-def audio_mischen(stimme, musik, gesamt, schnitt_zeiten, twist_zeit, ziel):
-    """Stimme + Musik (duckt automatisch unter der Stimme) + leise Soundeffekte."""
-    sfx = sfx_erzeugen()
-    eingaben = ["-i", stimme]
-    filter_teile = ["[0:a]aformat=sample_rates=44100:channel_layouts=stereo,asplit=2[stimme][sc]"]
-    mix = ["[stimme]"]
-    n = 1
-    if musik:
-        eingaben += ["-stream_loop", "-1", "-i", musik]
-        filter_teile.append(
-            f"[{n}:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:{gesamt:.2f},"
-            f"volume={MUSIK_LAUTSTAERKE},afade=t=in:d=0.8,afade=t=out:st={max(0, gesamt - 1.8):.2f}:d=1.8[m];"
-            f"[m][sc]sidechaincompress=threshold=0.04:ratio=6:attack=15:release=350[musik]")
-        mix.append("[musik]")
-        n += 1
-    else:
-        filter_teile.append("[sc]anullsink")
+def _ccmixter(tag):
+    try:
+        r = requests.get("https://ccmixter.org/api/query", headers=WIKI_HEADERS, timeout=30,
+                         params={"f": "json", "tags": tag, "lic": "by", "limit": 30, "sort": "rank"})
+        liste = r.json() if r.status_code == 200 else []
+    except Exception as e:
+        log(f"ccMixter nicht erreichbar: {e.__class__.__name__}")
+        return []
+    out = []
+    for t in liste if isinstance(liste, list) else []:
+        mp3 = [f for f in t.get("files", []) if str(f.get("download_url", "")).endswith(".mp3")]
+        if mp3:
+            out.append({"id": f"cc{t.get('upload_id')}", "url": mp3[0]["download_url"], "title": t.get("upload_name"),
+                        "creator": t.get("user_name"), "license": "by", "license_version": "",
+                        "landing": t.get("file_page_url", ""), "tags": tag, "dauer": 0})
+    return out
 
-    ereignisse = [("pop", 0.05)] + [("whoosh", max(0, t - 0.25)) for t in schnitt_zeiten]
-    if twist_zeit:
-        ereignisse += [("riser", max(0, twist_zeit - 1.2)), ("impact", twist_zeit)]
-    zaehler = {}
-    for name, t in ereignisse:
-        zaehler[name] = zaehler.get(name, 0) + 1
-    index = {}
-    for name in zaehler:
-        eingaben += ["-i", sfx[name]]
-        index[name] = n
-        filter_teile.append(f"[{n}:a]aformat=sample_rates=44100:channel_layouts=stereo,"
-                            f"asplit={zaehler[name]}" + "".join(f"[{name}{k}]" for k in range(zaehler[name])))
-        n += 1
-    benutzt = {}
-    for name, t in ereignisse:
-        k = benutzt.get(name, 0)
-        benutzt[name] = k + 1
-        ms = int(t * 1000)
-        filter_teile.append(f"[{name}{k}]adelay={ms}|{ms},volume={SFX_LAUTSTAERKE}[e_{name}{k}]")
-        mix.append(f"[e_{name}{k}]")
-    filter_teile.append(f"{''.join(mix)}amix=inputs={len(mix)}:normalize=0:duration=first,"
-                        f"apad=whole_dur={gesamt:.2f},loudnorm=I=-14:TP=-1.5:LRA=11,alimiter=limit=0.95[out]")
-    ffmpeg(*eingaben, "-filter_complex", ";".join(filter_teile), "-map", "[out]", "-t", f"{gesamt:.2f}",
-           "-ar", "44100", ziel)
+
+def _nachweis(t):
+    lizenz = "gemeinfrei (CC0)" if t["license"] in ("cc0", "pdm") else f"CC {t['license'].upper()} {t['license_version']}".strip()
+    return f"„{t['title']}“ von {t['creator']} – {lizenz} – {t['landing']}".strip(" –")
+
+
+def _laden(t):
+    try:
+        daten = requests.get(t["url"], headers=WIKI_HEADERS, timeout=60).content
+    except requests.RequestException:
+        return None
+    if len(daten) < 150_000 or daten[:15].lstrip().startswith(b"<"):
+        return None
+    MUSIK_CACHE.mkdir(parents=True, exist_ok=True)
+    ziel = MUSIK_CACHE / f"{re.sub(r'[^A-Za-z0-9]', '', t['id'])[:24]}.mp3"
+    ziel.write_bytes(daten)
+    index = _lade_json(MUSIK_CACHE / "index.json") or {}
+    index[ziel.name] = {"nachweis": _nachweis(t), "stimmung": t.get("_stimmung", ""), "tags": t.get("tags", "")}
+    # Cache begrenzen (aelteste raus)
+    for alt in list(index)[:-MUSIK_CACHE_MAX]:
+        (MUSIK_CACHE / alt).unlink(missing_ok=True)
+        index.pop(alt, None)
+    (MUSIK_CACHE / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=1), encoding="utf-8")
+    return ziel
+
+
+def musik_waehlen(daten):
+    """Die KI waehlt aus mehreren frei lizenzierten Tracks den passendsten aus.
+    Klappt das nicht: leichte, entspannte Musik. Notfalls ein Track aus dem eigenen Musik-Archiv."""
+    global MUSIKNACHWEIS
+    stimmung = str(daten.get("musik_stimmung", "spannend")).lower()
+    zuletzt = set((_lade_json(USED_MUSIK) or [])[-12:])
+
+    for runde, suchbegriffe in enumerate([STIMMUNG_SUCHE.get(stimmung, STIMMUNG_SUCHE["spannend"]), ENTSPANNT]):
+        kandidaten = {}
+        for q in random.sample(suchbegriffe, min(3, len(suchbegriffe))):
+            for t in _openverse(q) or _openverse(q, nur_musik=False):
+                if t["id"] not in zuletzt:
+                    t["_stimmung"] = stimmung if runde == 0 else "ruhig"
+                    kandidaten[t["id"]] = t
+        if not kandidaten:
+            for tag in (["cinematic", "instrumental"] if runde == 0 else ["ambient", "chill"]):
+                for t in _ccmixter(tag):
+                    if t["id"] not in zuletzt:
+                        t["_stimmung"] = stimmung if runde == 0 else "ruhig"
+                        kandidaten[t["id"]] = t
+        log(f"Musik-Kandidaten ({'passend: ' + stimmung if runde == 0 else 'entspannt'}): {len(kandidaten)}")
+        if not kandidaten:
+            continue
+        liste = list(kandidaten.values())
+        random.shuffle(liste)
+        liste = liste[:15]
+        reihenfolge = liste
+        if runde == 0:
+            try:
+                auswahl = "\n".join(f"{i}: {t['title']} | Tags: {t['tags']} | {t['dauer']} s" for i, t in enumerate(liste))
+                prompt = f"""Du bist Musik-Supervisor fuer einen YouTube-Short ueber: "{daten.get('titel')}" ({daten.get('thema')}).
+Gewuenschte Stimmung: {stimmung}. Die Musik laeuft LEISE unter einer Erzaehlstimme.
+Waehle die 3 passendsten Tracks (Atmosphaere, Epoche, Tempo). Meide Gesang, Rap, Lyrics, Weihnachtslieder, Fanfaren.
+
+{auswahl}
+
+Antworte NUR mit JSON: {{"auswahl": [Nummer1, Nummer2, Nummer3], "warum": "1 Satz"}}"""
+                wahl, _ = ki(prompt, temperatur=0.3)
+                nummern = [int(n) for n in wahl.get("auswahl", []) if str(n).isdigit() and int(n) < len(liste)]
+                reihenfolge = [liste[n] for n in nummern] + [t for i, t in enumerate(liste) if i not in nummern]
+                log(f"KI-Musikwahl: {wahl.get('warum', '')}")
+            except Exception as e:
+                log(f"KI-Musikwahl nicht moeglich ({e.__class__.__name__}), nehme Zufall")
+        for t in reihenfolge[:6]:
+            pfad = _laden(t)
+            if pfad:
+                _merke_musik(t["id"])
+                MUSIKNACHWEIS = _nachweis(t)
+                log(f"Musik: {MUSIKNACHWEIS}")
+                return pfad
+
+    # Notfall: aus dem selbst gesammelten Archiv (bevorzugt ruhige Tracks)
+    index = _lade_json(MUSIK_CACHE / "index.json") or {}
+    archiv = [(n, i) for n, i in index.items() if (MUSIK_CACHE / n).exists()]
+    if archiv:
+        ruhig = [a for a in archiv if a[1].get("stimmung") == "ruhig"] or archiv
+        name, info = random.choice(ruhig)
+        MUSIKNACHWEIS = info.get("nachweis", "")
+        log(f"Musik aus dem Archiv: {name}")
+        return MUSIK_CACHE / name
+    log("Keine Musik verfuegbar, Video ohne Musik.")
+    MUSIKNACHWEIS = ""
+    return None
+
+
+def audio_mischen(stimme, musik, gesamt, ziel):
+    """Stimme + leise Musik, die unter der Stimme automatisch noch leiser wird (Ducking)."""
+    if not musik:
+        ffmpeg("-i", stimme, "-af", f"apad=whole_dur={gesamt:.2f},loudnorm=I=-14:TP=-1.5:LRA=11",
+               "-t", f"{gesamt:.2f}", "-ar", "44100", "-ac", "2", ziel)
+        return
+    start = 0.0
+    try:
+        laenge = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                       "-of", "csv=p=0", str(musik)], capture_output=True, text=True).stdout or 0)
+        if laenge > gesamt + 30:
+            start = random.uniform(0, min(40, laenge - gesamt - 5))   # nicht immer beim selben Intro starten
+    except ValueError:
+        pass
+    filt = (f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={gesamt:.2f},asplit=2[stimme][sc];"
+            f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:{gesamt:.2f},asetpts=PTS-STARTPTS,"
+            f"volume={MUSIK_LAUTSTAERKE},afade=t=in:d=0.2,afade=t=out:st={max(0, gesamt - 0.4):.2f}:d=0.4[m];"
+            f"[m][sc]sidechaincompress=threshold=0.04:ratio=5:attack=20:release=400[musik];"
+            f"[stimme][musik]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=11,"
+            f"alimiter=limit=0.95[out]")
+    ffmpeg("-i", stimme, "-ss", f"{start:.1f}", "-stream_loop", "-1", "-i", musik,
+           "-filter_complex", filt, "-map", "[out]", "-t", f"{gesamt:.2f}", "-ar", "44100", ziel)
 
 
 # ---------------------------------------------------------------- Video bauen
@@ -900,17 +1027,18 @@ def video_bauen(daten):
 
     # 2) Wort-Zeiten -> Untertitel + Szenengrenzen
     zeiten = [(a / tempo, b / tempo) for a, b in wort_zeiten(WORK / "voice.wav", woerter)]
-    ende_gesamt = wav_dauer(WORK / "voice.wav") + 0.6
+    ende_gesamt = wav_dauer(WORK / "voice.wav") + 0.15     # fast keine Pause am Ende -> sauberer Loop
     eintraege = []
     for i in range(len(szenen)):
-        idx = [k for k, s in enumerate(szene_von) if s == i]
+        idx = [k for k, sz in enumerate(szene_von) if sz == i]
         for gruppe in chunk_grenzen([woerter[k] for k in idx]):
             ks = [idx[g] for g in gruppe]
-            eintraege.append([" ".join(woerter[k] for k in ks), zeiten[ks[0]][0], zeiten[ks[-1]][1], i == 0])
+            eintraege.append([[(woerter[k], zeiten[k][0], zeiten[k][1]) for k in ks],
+                              zeiten[ks[0]][0], zeiten[ks[-1]][1]])
     for n in range(len(eintraege) - 1):          # Untertitel lueckenlos bis zum naechsten
         eintraege[n][2] = max(eintraege[n][2], eintraege[n + 1][1])
     eintraege[-1][2] = ende_gesamt
-    untertitel_schreiben(eintraege, WORK / "subs.ass")
+    untertitel_schreiben(eintraege, WORK / "subs.ass", daten.get("hook_text", ""))
 
     starts = [0.0] + [zeiten[szene_von.index(i)][0] for i in range(1, len(szenen))]
     grenzen = starts + [ende_gesamt]
@@ -948,7 +1076,7 @@ def video_bauen(daten):
             else:
                 clip = WORK / f"clip_{i:02d}_{j}.mp4"
                 clip.write_bytes(requests.get(quelle, timeout=300).content)
-                szene_rendern(clip, teil_dauer, seg)
+                szene_rendern(clip, teil_dauer, seg, len(segmente))
             segmente.append(seg)
         log(f"Szene {i+1}/{len(szenen)}: {teile} Schnitt(e), "
             f"{'echtes Bild + ' if visuals[0][0] == 'bild' else ''}'{s.get('suchbegriff_en')}' ok")
@@ -960,11 +1088,10 @@ def video_bauen(daten):
     liste.write_text("".join(f"file '{p.resolve()}'\n" for p in segmente))
     ffmpeg("-f", "concat", "-safe", "0", "-i", liste, "-c", "copy", WORK / "bild.mp4")
 
-    # 4) Ton: Stimme + Musik + Soundeffekte
+    # 4) Ton: Stimme + Hintergrundmusik
     try:
-        musik = musik_waehlen(str(daten.get("musik_stimmung", "spannend")).lower())
-        twist = starts[-1] if len(starts) > 2 else None
-        audio_mischen(WORK / "voice.wav", musik, ende_gesamt, starts[1:], twist, WORK / "ton.wav")
+        musik = musik_waehlen(daten)
+        audio_mischen(WORK / "voice.wav", musik, ende_gesamt, WORK / "ton.wav")
         ton = WORK / "ton.wav"
         daten["musiknachweis"] = MUSIKNACHWEIS
     except Exception as e:
@@ -999,6 +1126,7 @@ def telegram_senden(video, daten, check, dauer):
     pruef = "\n".join(f"{'✅' if p.get('beleg_im_text') else '⚠️'} {p.get('behauptung')}"
                       for p in check.get("pruefung", []))
     text = (f"📌 TITEL\n{daten['titel']}\n\n"
+            f"🪝 HOOK-TEXT\n{daten.get('hook_text', '–')}\n\n"
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
             f"Quelle: {daten['quellen'][0]}\n"
             + (("Bilder: " + "; ".join(daten.get("bildnachweise", [])) + "\n") if daten.get("bildnachweise") else "")
@@ -1017,7 +1145,10 @@ YT_REFRESH_TOKEN = os.environ.get("YT_REFRESH_TOKEN", "")
 
 
 def youtube_beschreibung(daten):
-    teile = [daten.get("beschreibung", ""), "", f"📚 Quelle: {daten['quellen'][0]}"]
+    teile = [daten.get("beschreibung", "")]
+    if daten.get("kommentar_frage"):
+        teile += ["", f"💬 {daten['kommentar_frage']} Schreib's in die Kommentare!"]
+    teile += ["", f"📚 Quelle: {daten['quellen'][0]}"]
     if daten.get("bildnachweise"):
         teile += ["", "📸 Bildnachweise:"] + [f"• {b}" for b in daten["bildnachweise"]]
     if daten.get("musiknachweis"):
