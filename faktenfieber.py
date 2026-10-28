@@ -51,16 +51,20 @@ def log(msg):
 
 
 # ================================================================ KI-Anbieter
-GESPERRT = set()
+GESPERRT = {}        # (anbieter, modell) -> gesperrt bis Zeitpunkt
 
 
 def _openai_kompatibel(url, key, modell, prompt, temperatur):
-    r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=120, json={
+    body = {
         "model": modell,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": temperatur,
         "response_format": {"type": "json_object"},
-    })
+    }
+    r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=90, json=body)
+    if r.status_code == 400 and "json_validate" in r.text:
+        body.pop("response_format")          # manche Modelle mögen den JSON-Modus nicht
+        r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=90, json=body)
     if r.status_code != 200:
         return r.status_code, r.text[:300], None
     return 200, "", r.json()["choices"][0]["message"]["content"]
@@ -68,7 +72,7 @@ def _openai_kompatibel(url, key, modell, prompt, temperatur):
 
 def _gemini(modell, prompt, temperatur):
     r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent",
-                      params={"key": GEMINI_KEY}, timeout=120, json={
+                      params={"key": GEMINI_KEY}, timeout=45, json={
                           "contents": [{"role": "user", "parts": [{"text": prompt}]}],
                           "generationConfig": {"temperature": temperatur,
                                                "responseMimeType": "application/json"}})
@@ -85,7 +89,7 @@ def _groq_modelle():
         ids = [m["id"] for m in r.json().get("data", [])]
     except Exception:
         return ["llama-3.3-70b-versatile"]
-    ids = [i for i in ids if not any(x in i for x in ("whisper", "guard", "tts", "prompt", "playai", "compound"))]
+    ids = [i for i in ids if not any(x in i for x in ("whisper", "guard", "tts", "prompt", "playai", "compound", "orpheus", "canopylabs", "speech", "audio"))]
     vorlieben = ["gpt-oss-120b", "kimi", "llama-4-maverick", "llama-3.3-70b", "qwen", "llama-4", "gpt-oss-20b"]
     ids.sort(key=lambda i: next((n for n, v in enumerate(vorlieben) if v in i), 99))
     return ids[:4]
@@ -102,7 +106,7 @@ def _gemini_modelle():
                     and not any(x in n for x in ("image", "tts", "audio", "live", "embed", "omni"))):
                 v = re.search(r"gemini-(\d+(?:\.\d+)?)", n)
                 namen.append((("preview" not in n, "lite" not in n, float(v.group(1)) if v else 0), n))
-        return [n for _, n in sorted(namen, reverse=True)][:5] or ["gemini-flash-latest"]
+        return [n for _, n in sorted(namen, reverse=True)][:3] or ["gemini-flash-latest"]
     except Exception:
         return ["gemini-flash-latest"]
 
@@ -136,10 +140,12 @@ def ki(prompt, temperatur=0.8, nicht=None):
     global ANBIETER
     if not ANBIETER:
         ANBIETER = anbieter_laden()
-    reihenfolge = [a for a in ANBIETER if a[0] != nicht] + [a for a in ANBIETER if a[0] == nicht]
+    # nicht = "Anbieter/Modell" des Autors -> fuer den Check zuerst ein ANDERES Modell nehmen
+    reihenfolge = ([a for a in ANBIETER if f"{a[0]}/{a[1]}" != nicht] +
+                   [a for a in ANBIETER if f"{a[0]}/{a[1]}" == nicht])
     fehler = ""
     for name, modell, funk in reihenfolge:
-        if (name, modell) in GESPERRT:
+        if GESPERRT.get((name, modell), 0) > time.time():
             continue
         for versuch in range(2):
             try:
@@ -158,8 +164,17 @@ def ki(prompt, temperatur=0.8, nicht=None):
             if code in (429, 500, 502, 503, 0) and versuch == 0:
                 time.sleep(8)
                 continue
-            GESPERRT.add((name, modell))
+            # 429/503 = nur voruebergehend (45 s), alles andere (403, 404 ...) = fuer diesen Lauf raus
+            GESPERRT[(name, modell)] = time.time() + (45 if code in (429, 500, 502, 503, 0) else 10**9)
             break
+    if not getattr(ki, "_nochmal", False):
+        ki._nochmal = True
+        log("Alle KIs gerade busy – warte 60 s und probiere nochmal ...")
+        time.sleep(60)
+        try:
+            return ki(prompt, temperatur, nicht)
+        finally:
+            ki._nochmal = False
     raise RuntimeError(f"Keine KI erreichbar. Letzter Fehler: {fehler}")
 
 
@@ -314,7 +329,7 @@ def faktencheck(daten):
 
     # Stufe 2: Eine (moeglichst andere) KI vergleicht den Sprechtext mit dem Artikel
     sprechtext = " ".join(s["text"] for s in daten["szenen"])
-    autor = daten["_modell"].split("/")[0]
+    autor = daten["_modell"]
     prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit dem ARTIKEL.
 Jede Aussage im Sprechtext muss durch den Artikel gedeckt sein. Markiere alles, was erfunden,
 uebertrieben, verdreht oder irrefuehrend ist. Stilmittel wie "Wusstest du" oder Fragen sind ok.
