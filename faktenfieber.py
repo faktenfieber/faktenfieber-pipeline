@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v4.3
+FAKTENFIEBER – Pipeline v4.5
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -270,7 +270,7 @@ def schon_benutzt(titel, benutzt):
     return False
 
 
-def wiki_kandidaten(benutzt, anzahl=10):
+def wiki_kandidaten(benutzt, anzahl=14):
     titel = set()
     # ~3/4 gezielt aus Geschichte & unnuetzem Wissen, Rest zufaellig quer durch alles
     for begriff in random.sample(THEMEN_SUCHE, 5):
@@ -463,20 +463,23 @@ Bewerte ehrlich (1-10):
 "verstaendlich": Versteht jeder ohne Vorwissen das Thema sofort, ohne viel Erklaerung?
 "massentauglich": Wie sehr interessiert das ein breites Publikum (Jugendliche UND Erwachsene)?
 Waehle nur ein Thema mit verstaendlich >= 8 UND massentauglich >= 7. Im Zweifel das EINFACHERE Thema nehmen.
+TEST: Du musst das Thema in EINEM kurzen Satz so erklaeren koennen, dass es ein 12-Jaehriger versteht
+("Ein Schiff, das als unsinkbar galt, ist bei seiner ersten Fahrt gesunken."). Geht das nicht, ist das
+Thema zu schwer -> anderes nehmen.
 Meide komplett: Politik, Parteien, Religion/Theologie, Recht, Wirtschaft, Philosophie, Kunstgeschichte,
 Architektur, Sprachwissenschaft, Adelsfamilien und Stammbaeume, Verwaltung, abstrakte Wissenschaft
 (komplizierte Chemie, Physik, Mathematik), und alles mit vielen Namen und Jahreszahlen.
 
 {liste}
 
-Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "spannung": 1-10, "verstaendlich": 1-10, "massentauglich": 1-10}}"""
+Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "einfach_erklaert": "der eine kurze Satz", "spannung": 1-10, "verstaendlich": 1-10, "massentauglich": 1-10}}"""
     wahl, _ = ki(prompt, temperatur=0.4)
     titel = wahl.get("titel", "")
     if titel not in kandidaten:
         titel = difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten)[:1]
         titel = titel[0]
     log(f"Gewaehlt: {titel} (Spannung {wahl.get('spannung')}, verstaendlich {wahl.get('verstaendlich')}, "
-        f"massentauglich {wahl.get('massentauglich')}) – {wahl.get('warum', '')}")
+        f"massentauglich {wahl.get('massentauglich')}) – {wahl.get('einfach_erklaert') or wahl.get('warum', '')}")
     return titel
 
 
@@ -511,6 +514,11 @@ STIL:
     Menschen damals bedeutet hat.
   * Vergleiche mit der Welt von heute: Handy, Job, Fussballfeld, Supermarkt, Wohnung, Auto usw.
   * Gefuehl rein: Was ist daran gruselig, eklig, lustig, unfair oder genial?
+- BEISPIEL, wie es klingen soll:
+  SCHLECHT: "Die fruehneuzeitliche Inkognito-Praxis des Hochadels stellte ein zeremonielles Regelwerk dar."
+  GUT: "Koenige durften frueher nicht einfach so verreisen. Also haben sie sich verkleidet. Wie ein Promi mit Kappe und Sonnenbrille."
+  Kein Satz darf klingen wie aus Wikipedia abgeschrieben. Ein automatischer Test misst die Verstaendlichkeit,
+  zu komplizierte Texte werden abgelehnt.
 - KOMPLIZIERTES EINFACH MACHEN: Erklaere so, dass es jeder ohne Vorwissen sofort versteht.
   Jeder Fachbegriff, jedes Fremdwort, jeder unbekannte Ort und jede Epoche bekommt sofort eine kurze,
   einfache Erklaerung ("ein Gasometer, also ein riesiger Speicher fuer Gas"). Lieber ein Detail weglassen
@@ -596,6 +604,47 @@ def beleg_gefunden(beleg, artikel):
     return m.size >= 0.85 * len(b)
 
 
+MAX_SCHWIERIGKEIT = float(os.environ.get("MAX_SCHWIERIGKEIT", "7"))   # Standard, per Telegram aenderbar (/schwierigkeit)
+SCHWIERIGKEIT_MIN, SCHWIERIGKEIT_MAX = 4, 10
+SKALA = ("4 = sehr leicht, wie ein Gespräch unter Freunden\n"
+         "5 = leicht, einfache Alltagssprache\n"
+         "6 = leicht mit etwas mehr Details\n"
+         "7 = mittel (Standard) – wie ein lockerer Zeitungsartikel\n"
+         "8 = anspruchsvoller, längere Sätze\n"
+         "9–10 = schon recht schwer, eher wie ein Sachbuch")
+
+
+def aktuelle_grenze():
+    """Grenze aus dem gespeicherten Status (per /schwierigkeit gesetzt), sonst Standard."""
+    try:
+        wert = float(json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("max_schwierigkeit"))
+        return max(SCHWIERIGKEIT_MIN, min(SCHWIERIGKEIT_MAX, wert))
+    except Exception:
+        return MAX_SCHWIERIGKEIT
+
+
+def _silben(wort):
+    return max(1, len(re.findall(r"[aeiouyäöü]+", wort.lower())))
+
+
+def verstaendlichkeit(text, ausnahmen=""):
+    """Misst, wie schwer ein Text ist (Wiener Sachtextformel) und findet die Problemstellen."""
+    saetze = [x.strip() for x in re.split(r"[.!?]+", text) if x.strip()]
+    woerter = re.findall(r"[A-Za-zÄÖÜäöüß]+", text)
+    if not woerter or not saetze:
+        return 0.0, [], []
+    n = len(woerter)
+    ms = 100 * sum(_silben(w) >= 3 for w in woerter) / n
+    sl = n / len(saetze)
+    iw = 100 * sum(len(w) > 6 for w in woerter) / n
+    es = 100 * sum(_silben(w) == 1 for w in woerter) / n
+    wert = round(0.1935 * ms + 0.1672 * sl + 0.1297 * iw - 0.0327 * es - 0.875, 1)
+    frei = set(re.findall(r"[A-Za-zÄÖÜäöüß]+", ausnahmen.lower()))
+    lange_woerter = sorted({w for w in woerter if (len(w) >= 14 or _silben(w) >= 5) and w.lower() not in frei})
+    lange_saetze = [x for x in saetze if len(x.split()) > 14]
+    return wert, lange_woerter, lange_saetze
+
+
 def faktencheck(daten):
     artikel = daten["_artikel"]
     # Stufe 0: Laenge (zu lange Texte werden sonst beschleunigt und klingen gehetzt)
@@ -605,6 +654,27 @@ def faktencheck(daten):
         return False, {"pruefung": [], "gesamt": "nicht_ok",
                        "reparieren": [f"Der Text ist mit {anzahl} Woertern zu lang. Kuerze ihn auf hoechstens 100 Woerter, "
                                       f"indem du unwichtige Saetze streichst. Hook und Pointe bleiben."]}
+    # Stufe 0b: Ist das ohne Vorwissen verstaendlich?
+    sprech = " ".join(s["text"] for s in daten.get("szenen", []))
+    wert, lange_woerter, lange_saetze = verstaendlichkeit(sprech, daten.get("thema", ""))
+    daten["_schwierigkeit"] = wert
+    grenze = aktuelle_grenze()
+    daten["_grenze"] = grenze
+    erlaubt_woerter = 1 if grenze <= 5 else 3 if grenze <= 7 else 5
+    erlaubt_saetze = 0 if grenze <= 5 else 1 if grenze <= 7 else 2
+    if wert > grenze or len(lange_woerter) > erlaubt_woerter or len(lange_saetze) > erlaubt_saetze:
+        log(f"Stufe 0b: zu kompliziert (Schwierigkeit {wert}, Ziel max. {grenze}), "
+            f"{len(lange_woerter)} schwere Woerter, {len(lange_saetze)} lange Saetze")
+        aufgaben = [f"Der Text ist zu kompliziert (Schwierigkeit {wert}, erlaubt max. {grenze}). "
+                    f"Schreib ihn so um, dass ihn wirklich JEDER ohne Vorwissen sofort versteht: "
+                    f"kurze Saetze mit max. 10-12 Woertern, kurze Alltagswoerter, keine Fachbegriffe."]
+        if lange_woerter:
+            aufgaben.append("Ersetze diese schweren Woerter durch einfache Alltagswoerter oder erklaere sie: "
+                            + ", ".join(lange_woerter[:12]))
+        for satz in lange_saetze[:4]:
+            aufgaben.append(f"Teile diesen langen Satz in zwei kurze: „{satz}“")
+        return False, {"pruefung": [], "gesamt": "nicht_ok", "reparieren": aufgaben}
+    log(f"Stufe 0b: verstaendlich ✅ (Schwierigkeit {wert}, Grenze {grenze})")
     # Stufe 1: Stehen die Zitate wirklich im Artikel?
     pruefung, alle_ok = [], True
     for b in daten.get("behauptungen", []):
@@ -1513,6 +1583,7 @@ def telegram_senden(video, daten, check, dauer, knoepfe=None, kopfzeile=""):
             + ((f"Musik: {daten['musiknachweis']}\n") if daten.get("musiknachweis") else "")
             + f"\n{' '.join(daten.get('hashtags', []))}\n\n"
             f"🔎 FAKTENCHECK (Prüfer: {check.get('pruefer', '?')})\n{pruef}\n\n"
+            f"🧠 Schwierigkeit: {daten.get('_schwierigkeit', '?')} (deine Grenze: {daten.get('_grenze', '?')} · ändern mit /schwierigkeit)\n"
             f"🤖 Geschrieben von: {daten.get('_modell')}\n🎙 Stimme: {STIMME_GENUTZT}")
     daten_tg = {"chat_id": TG_CHAT, "text": text[:4000], "disable_web_page_preview": "true"}
     if knoepfe:
@@ -1968,7 +2039,7 @@ def modus_pruefen():
 
     # 0) Befehle vom Tuersteher
     befehl = os.environ.get("AKTION", "")
-    if befehl in ("pause", "weiter", "status"):
+    if befehl in ("pause", "weiter", "status", "schwierigkeit"):
         befehl_ausfuehren(st, befehl)
         status_speichern(st)
         if befehl == "status":
@@ -2063,6 +2134,20 @@ def posting_melden(eintrag, meta, ergebnis):
 
 
 def befehl_ausfuehren(st, befehl):
+    if befehl == "schwierigkeit":
+        roh = os.environ.get("AKTION_SLOT", "").replace(",", ".").strip()
+        aktuell = st.get("max_schwierigkeit", MAX_SCHWIERIGKEIT)
+        try:
+            neu = float(roh)
+        except ValueError:
+            telegram_text(f"🧠 Aktuell eingestellt: {aktuell}. Ändern mit z. B. /schwierigkeit 5")
+            return
+        neu = round(max(SCHWIERIGKEIT_MIN, min(SCHWIERIGKEIT_MAX, neu)), 1)
+        st["max_schwierigkeit"] = neu
+        hinweis = (" Achtung: Bei so niedrigen Werten werden mehr Themen aussortiert, dann kann ein Video "
+                   "auch mal länger dauern." if neu <= 4.5 else "")
+        telegram_text(f"✅ Schwierigkeits-Grenze von {aktuell} auf {neu} geändert. Gilt ab dem nächsten Video.{hinweis}")
+        return
     if befehl == "pause":
         st["pause"] = True
         telegram_text("⏸ Pause aktiviert. Es werden keine automatischen Videos mehr gebaut.\n"
@@ -2089,6 +2174,7 @@ def befehl_ausfuehren(st, befehl):
                       + ("⏸ PAUSE ist aktiv (/weiter zum Fortsetzen)\n\n" if st.get("pause") else "▶️ Automatik läuft\n\n")
                       + "\n\n".join(zeilen or ["(noch keine Videos)"])
                       + f"\n\n🎬 Gepostet (letzte 7 Tage): {gepostet}"
+                      + f"\n🧠 Schwierigkeits-Grenze: {st.get('max_schwierigkeit', MAX_SCHWIERIGKEIT)}"
                       + f"\n🔑 Instagram-Token zuletzt erneuert: {ig}"
                       + f"\n▶️ YouTube: {'öffentlich' if os.environ.get('YT_SICHTBARKEIT') == 'public' else 'privat (Audit offen)'}")
 
