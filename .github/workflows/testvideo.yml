@@ -1,4 +1,4 @@
-name: Testvideo
+name: Testvideo (nur Telegram)
 
 on:
   workflow_dispatch:
@@ -36,10 +36,10 @@ jobs:
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
           YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
-          YT_UPLOAD: "1"
+          YT_UPLOAD: "0"          # 1 = Test lädt auf YouTube hoch
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
-          IG_UPLOAD: "1"
+          IG_UPLOAD: "0"          # 1 = Test postet auf Instagram (öffentlich!)
           GH_PAT: ${{ secrets.GH_PAT }}
         run: python faktenfieber.py
 
