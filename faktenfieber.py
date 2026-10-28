@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v0.1 (Testvideo)
-Thema finden -> Skript -> Faktencheck -> Voiceover -> Clips -> Schnitt + Untertitel -> Telegram
+FAKTENFIEBER – Pipeline v0.5
+Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
+
+KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
+  MISTRAL_API_KEY, GROQ_API_KEY, GEMINI_API_KEY
 """
+import difflib
 import json
 import os
 import random
 import re
+import string
 import subprocess
 import sys
 import time
@@ -28,130 +33,134 @@ LENGTH_SCALE = float(os.environ.get("VOICE_SPEED", "0.92"))   # <1 = schneller
 FONT = "DejaVu Sans"
 MAX_VERSUCHE = 4                       # neue Themen, falls Faktencheck durchfaellt
 
+MISTRAL_KEY = os.environ.get("MISTRAL_API_KEY", "")
+GROQ_KEY = os.environ.get("GROQ_API_KEY", "")
 GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
 PIXABAY_KEY = os.environ.get("PIXABAY_API_KEY", "")
 TG_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-KATEGORIEN = [
-    "Geschichte", "Tiere", "Weltall", "Menschlicher Koerper", "Psychologie",
-    "Erfindungen und Technik", "Essen und Trinken", "Geografie", "Ozeane",
-    "Wissenschaft", "Sprache und Woerter", "Kuriose Gesetze", "Natur und Pflanzen",
-    "Marken und Firmen", "Sport-Kuriositaeten", "Kunst und Musik",
-    "Historische Kriminalfaelle", "Populaere Irrtuemer (Mythos-Check)",
-    "Alltagsgegenstaende", "Wetter und Naturphaenomene",
-]
-
-GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+WIKI_API = "https://de.wikipedia.org/w/api.php"
+WIKI_HEADERS = {"User-Agent": "FaktenfieberBot/0.5 (faktenfieber.official@gmail.com)"}
+# Exzellente + lesenswerte Artikel = von der Community gepruefte Qualitaet, tausende Themen
+WIKI_KATEGORIEN = ["Kategorie:Wikipedia:Exzellent", "Kategorie:Wikipedia:Lesenswert"]
 
 
 def log(msg):
     print(f"[Faktenfieber] {msg}", flush=True)
 
 
-# ---------------------------------------------------------------- Gemini
-def gemini_modelle():
-    """Sucht die aktuell verfuegbaren Flash-Modelle, bestes zuerst."""
-    if os.environ.get("GEMINI_MODEL"):
-        return [os.environ["GEMINI_MODEL"]]
-    r = requests.get(f"{GEMINI_BASE}/models",
-                     params={"key": GEMINI_KEY, "pageSize": 1000}, timeout=30)
-    r.raise_for_status()
-    kandidaten = []
-    for m in r.json().get("models", []):
-        name = m["name"].split("/")[-1]
-        if "generateContent" not in m.get("supportedGenerationMethods", []):
-            continue
-        if "flash" not in name:
-            continue
-        if any(x in name for x in ("image", "tts", "audio", "live", "embed", "thinking")):
-            continue
-        v = re.search(r"gemini-(\d+(?:\.\d+)?)", name)
-        version = float(v.group(1)) if v else 0.0
-        score = (
-            "preview" not in name and "exp" not in name,
-            "lite" not in name,
-            version,
-        )
-        kandidaten.append((score, name))
-    kandidaten.sort(reverse=True)
-    namen = [n for _, n in kandidaten] or ["gemini-flash-latest"]
-    log(f"Gemini-Modelle: {', '.join(namen[:4])}")
-    return namen
+# ================================================================ KI-Anbieter
+GESPERRT = set()
 
 
-MODELLE = []
-GESPERRT = set()          # (modell, suche) Kombis ohne Gratis-Kontingent
-OHNE_SUCHE = False        # wird True, wenn die Live-Suche nicht verfuegbar war
-
-
-def quota_info(r):
-    """Liest aus einer 429-Antwort, welches Limit gerissen ist."""
-    try:
-        details = r.json().get("error", {}).get("details", [])
-    except ValueError:
-        return ""
-    teile = []
-    for d in details:
-        for v in d.get("violations", []):
-            teile.append(f"{v.get('quotaId', '')} {v.get('quotaValue', '')}".strip())
-    return "; ".join(teile)
-
-
-def _anfrage(modell, body):
-    r = requests.post(f"{GEMINI_BASE}/models/{modell}:generateContent",
-                      params={"key": GEMINI_KEY}, json=body, timeout=180)
+def _openai_kompatibel(url, key, modell, prompt, temperatur):
+    r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=120, json={
+        "model": modell,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperatur,
+        "response_format": {"type": "json_object"},
+    })
     if r.status_code != 200:
-        return r, None
+        return r.status_code, r.text[:300], None
+    return 200, "", r.json()["choices"][0]["message"]["content"]
+
+
+def _gemini(modell, prompt, temperatur):
+    r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent",
+                      params={"key": GEMINI_KEY}, timeout=120, json={
+                          "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                          "generationConfig": {"temperature": temperatur,
+                                               "responseMimeType": "application/json"}})
+    if r.status_code != 200:
+        return r.status_code, r.text[:300], None
     kand = (r.json().get("candidates") or [{}])[0]
-    text = "".join(p.get("text", "") for p in kand.get("content", {}).get("parts", []))
-    quellen = [ch["web"]["title"] for ch in kand.get("groundingMetadata", {}).get("groundingChunks", [])
-               if (ch.get("web") or {}).get("title")]
-    return r, (text, quellen) if text.strip() else None
+    return 200, "", "".join(p.get("text", "") for p in kand.get("content", {}).get("parts", []))
 
 
-def gemini(prompt, suche=False, temperatur=0.9):
-    global MODELLE, OHNE_SUCHE
-    if not MODELLE:
-        MODELLE = gemini_modelle()
-    modi = [True, False] if suche else [False]
+def _groq_modelle():
+    try:
+        r = requests.get("https://api.groq.com/openai/v1/models",
+                         headers={"Authorization": f"Bearer {GROQ_KEY}"}, timeout=30)
+        ids = [m["id"] for m in r.json().get("data", [])]
+    except Exception:
+        return ["llama-3.3-70b-versatile"]
+    ids = [i for i in ids if not any(x in i for x in ("whisper", "guard", "tts", "prompt", "playai", "compound"))]
+    vorlieben = ["gpt-oss-120b", "kimi", "llama-4-maverick", "llama-3.3-70b", "qwen", "llama-4", "gpt-oss-20b"]
+    ids.sort(key=lambda i: next((n for n, v in enumerate(vorlieben) if v in i), 99))
+    return ids[:4]
+
+
+def _gemini_modelle():
+    try:
+        r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                         params={"key": GEMINI_KEY, "pageSize": 1000}, timeout=30)
+        namen = []
+        for m in r.json().get("models", []):
+            n = m["name"].split("/")[-1]
+            if ("generateContent" in m.get("supportedGenerationMethods", []) and "flash" in n
+                    and not any(x in n for x in ("image", "tts", "audio", "live", "embed", "omni"))):
+                v = re.search(r"gemini-(\d+(?:\.\d+)?)", n)
+                namen.append((("preview" not in n, "lite" not in n, float(v.group(1)) if v else 0), n))
+        return [n for _, n in sorted(namen, reverse=True)][:5] or ["gemini-flash-latest"]
+    except Exception:
+        return ["gemini-flash-latest"]
+
+
+ANBIETER = []
+
+
+def anbieter_laden():
+    """Reihenfolge: Mistral (bestes Deutsch) -> Groq (schnell) -> Gemini."""
+    liste = []
+    if MISTRAL_KEY:
+        url = "https://api.mistral.ai/v1/chat/completions"
+        for m in ("mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"):
+            liste.append(("Mistral", m, lambda m_, p, t, u=url: _openai_kompatibel(u, MISTRAL_KEY, m_, p, t)))
+    if GROQ_KEY:
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        for m in _groq_modelle():
+            liste.append(("Groq", m, lambda m_, p, t, u=url: _openai_kompatibel(u, GROQ_KEY, m_, p, t)))
+    if GEMINI_KEY:
+        for m in _gemini_modelle():
+            liste.append(("Gemini", m, _gemini))
+    if not liste:
+        sys.exit("Kein KI-Key gefunden! Mindestens MISTRAL_API_KEY, GROQ_API_KEY oder GEMINI_API_KEY setzen.")
+    log("KI-Anbieter: " + ", ".join(f"{a}/{m}" for a, m, _ in liste))
+    return liste
+
+
+def ki(prompt, temperatur=0.8, nicht=None):
+    """Fragt die KI und gibt (json_dict, 'Anbieter/Modell') zurueck.
+    nicht = Anbieter, der NICHT genommen werden soll (z. B. damit der Faktencheck unabhaengig ist)."""
+    global ANBIETER
+    if not ANBIETER:
+        ANBIETER = anbieter_laden()
+    reihenfolge = [a for a in ANBIETER if a[0] != nicht] + [a for a in ANBIETER if a[0] == nicht]
     fehler = ""
-    for mit_suche in modi:
-        if mit_suche is False and suche:
-            OHNE_SUCHE = True
-            log("⚠️ Live-Suche nicht verfuegbar, arbeite ohne Google-Suche weiter.")
-        body = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": temperatur},
-        }
-        if mit_suche:
-            body["tools"] = [{"google_search": {}}]
-        for modell in MODELLE[:8]:
-            if (modell, mit_suche) in GESPERRT:
+    for name, modell, funk in reihenfolge:
+        if (name, modell) in GESPERRT:
+            continue
+        for versuch in range(2):
+            try:
+                code, info, text = funk(modell, prompt, temperatur)
+            except requests.RequestException as e:
+                code, info, text = 503, e.__class__.__name__, None
+            if code == 200 and text:
+                try:
+                    daten = json_aus(text)
+                    log(f"KI ok: {name}/{modell}")
+                    return daten, f"{name}/{modell}"
+                except ValueError as e:
+                    code, info = 0, f"kaputtes JSON: {e}"
+            fehler = f"{name}/{modell}: {code} {info}"
+            log(f"KI-Problem -> {fehler}")
+            if code in (429, 500, 502, 503, 0) and versuch == 0:
+                time.sleep(8)
                 continue
-            for versuch in range(2):
-                r, ergebnis = _anfrage(modell, body)
-                if ergebnis:
-                    log(f"Gemini ok: {modell} ({'mit' if mit_suche else 'ohne'} Suche)")
-                    return ergebnis[0], ergebnis[1], modell
-                info = quota_info(r)
-                fehler = f"{modell}: HTTP {r.status_code} {info or r.text[:200]}"
-                log(f"Gemini-Problem -> {fehler}")
-                if r.status_code == 429:
-                    # Tageslimit oder gar kein Gratis-Kontingent -> sofort naechstes Modell
-                    if mit_suche or "PerDay" in info or "limit: 0" in r.text or ("FreeTier" in info and versuch):
-                        GESPERRT.add((modell, mit_suche))
-                        break
-                    time.sleep(20)
-                    continue
-                if r.status_code in (500, 503):
-                    time.sleep(10)
-                    continue
-                GESPERRT.add((modell, mit_suche))
-                break
-            else:
-                GESPERRT.add((modell, mit_suche))
-    raise RuntimeError(f"Gemini nicht erreichbar: {fehler}")
+            GESPERRT.add((name, modell))
+            break
+    raise RuntimeError(f"Keine KI erreichbar. Letzter Fehler: {fehler}")
 
 
 def json_aus(text):
@@ -162,7 +171,44 @@ def json_aus(text):
     return json.loads(text[a:b + 1])
 
 
-# ---------------------------------------------------------------- Thema + Skript
+# ================================================================ Wikipedia-Recherche
+def wiki(**params):
+    params.update(action="query", format="json", formatversion=2)
+    r = requests.get(WIKI_API, params=params, headers=WIKI_HEADERS, timeout=30)
+    r.raise_for_status()
+    return r.json()
+
+
+def wiki_kandidaten(benutzt, anzahl=8):
+    titel = set()
+    for _ in range(6):
+        kat = random.choice(WIKI_KATEGORIEN)
+        prefix = random.choice(string.ascii_uppercase)
+        daten = wiki(list="categorymembers", cmtitle=kat, cmlimit=50, cmnamespace=0,
+                     cmstartsortkeyprefix=prefix)
+        mitglieder = [m["title"] for m in daten.get("query", {}).get("categorymembers", [])]
+        random.shuffle(mitglieder)
+        titel.update(t for t in mitglieder[:4] if t not in benutzt)
+        if len(titel) >= anzahl:
+            break
+    if not titel:   # Notfall: zufaellige Artikel
+        daten = wiki(list="random", rnnamespace=0, rnlimit=anzahl)
+        titel = {m["title"] for m in daten["query"]["random"]}
+    titel = list(titel)[:anzahl]
+    intros = wiki(prop="extracts", exintro=1, explaintext=1, exlimit=20, titles="|".join(titel))
+    return {p["title"]: p.get("extract", "")[:600] for p in intros["query"]["pages"] if p.get("extract")}
+
+
+def wiki_artikel(titel):
+    daten = wiki(prop="extracts|info", explaintext=1, inprop="url", titles=titel, redirects=1)
+    seite = daten["query"]["pages"][0]
+    text = re.sub(r"\n{2,}", "\n", seite.get("extract", ""))
+    # Literatur/Weblinks/Einzelnachweise am Ende abschneiden
+    text = re.split(r"\n=+ (Literatur|Weblinks|Einzelnachweise|Anmerkungen) =+", text)[0]
+    return seite["title"], text[:14000], seite.get("fullurl", f"https://de.wikipedia.org/wiki/{titel}")
+
+
+# ================================================================ Thema + Skript
 def lade_benutzte():
     if USED_FILE.exists():
         return json.loads(USED_FILE.read_text(encoding="utf-8"))
@@ -176,70 +222,118 @@ def speichere_thema(thema):
     USED_FILE.write_text(json.dumps(benutzt, ensure_ascii=False, indent=1), encoding="utf-8")
 
 
-def skript_erstellen(benutzt):
-    kategorie = random.choice(KATEGORIEN)
-    letzte = "\n".join(f"- {t}" for t in benutzt[-150:]) or "- (noch keine)"
-    prompt = f"""Du bist Autor des deutschen Faceless-Kanals FAKTENFIEBER (YouTube Shorts + Instagram Reels).
-Recherchiere mit der Google-Suche EINEN ueberraschenden, wenig bekannten, aber 100 % WAHREN und gut belegten Fakt
-oder eine kurze wahre Geschichte aus der Kategorie: {kategorie}.
+def thema_waehlen(benutzt):
+    kandidaten = wiki_kandidaten(benutzt)
+    liste = "\n\n".join(f"### {t}\n{intro}" for t, intro in kandidaten.items())
+    prompt = f"""Du bist Redakteur des deutschen Shorts-Kanals FAKTENFIEBER (verrueckte, wahre Fakten und Geschichten).
+Hier sind Wikipedia-Artikel. Waehle den EINEN, aus dem sich das spannendste 45-Sekunden-Video
+fuer ein breites, junges Publikum machen laesst (ueberraschend, kurios, "das glaubt mir keiner").
+Langweilige Themen (Verwaltung, Listen, reine Biografien ohne Twist) meiden.
 
-REGELN:
-- Nur Dinge, die von serioesen Quellen (Fachmedien, Museen, Unis, Enzyklopaedien, grosse Zeitungen) belegt sind.
-  Wenn du unsicher bist: anderes Thema nehmen. Keine Mythen als Fakten, keine Uebertreibungen.
-- Nicht verwenden (schon gemacht):
-{letzte}
-- Laenge des gesprochenen Textes: 90 bis 125 Woerter (ca. 40-55 Sekunden).
-- Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook, der sofort neugierig macht.
+{liste}
+
+Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "spannung": 1-10}}"""
+    wahl, _ = ki(prompt, temperatur=0.4)
+    titel = wahl.get("titel", "")
+    if titel not in kandidaten:
+        titel = difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten)[:1]
+        titel = titel[0]
+    log(f"Gewaehlt: {titel} (Spannung {wahl.get('spannung')}/10) – {wahl.get('warum', '')}")
+    return titel
+
+
+def skript_erstellen(titel):
+    titel, artikel, url = wiki_artikel(titel)
+    prompt = f"""Du bist Autor des deutschen Faceless-Kanals FAKTENFIEBER (YouTube Shorts + Instagram Reels).
+Schreibe ein Short ueber den folgenden Wikipedia-Artikel.
+
+ABSOLUTE REGEL: Verwende NUR Fakten, die WOERTLICH so im Artikeltext stehen. Nichts dazuerfinden,
+nichts aus deinem eigenen Wissen ergaenzen, nicht uebertreiben, keine Zahlen runden oder aendern.
+
+ARTIKEL "{titel}":
+\"\"\"{artikel}\"\"\"
+
+STIL:
+- 90 bis 125 Woerter gesprochener Text (ca. 40-55 Sekunden).
+- Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook mit dem ueberraschendsten Detail.
 - Aufbau: Hook -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
 - Kurze, lebendige Saetze, Du-Ansprache, locker aber nicht cringe. Keine Emojis, keine Klammern,
   keine Abkuerzungen, keine Sonderzeichen. Der Text wird von einer Computerstimme vorgelesen.
-- Teile den Text in 5 bis 8 Szenen. Jede Szene: 1-2 Saetze + ein englischer Suchbegriff (2-3 Woerter)
-  fuer passendes Stock-Video (konkret und bildhaft, z. B. "old steam train", "octopus underwater").
-- Liste jede einzelne Faktenbehauptung separat auf, damit sie geprueft werden kann.
-- Erstelle Titel, Beschreibung und Hashtags fuer YouTube/Instagram selbst.
+- 5 bis 8 Szenen. Jede Szene: 1-2 Saetze + englischer Stock-Video-Suchbegriff (2-3 Woerter, konkret
+  und bildhaft, z. B. "old steam train", "foggy forest night").
+- Jede Faktenbehauptung einzeln auflisten, mit "beleg" = exaktes, woertliches Zitat (5-25 Woerter)
+  aus dem Artikeltext, das die Behauptung belegt. Copy-Paste, kein Umformulieren!
+- Titel, Beschreibung und Hashtags fuer YouTube/Instagram selbst erstellen.
 
-Antworte NUR mit diesem JSON:
+Antworte NUR mit JSON:
 {{
-  "thema": "kurzes Stichwort zum Thema",
-  "kategorie": "{kategorie}",
-  "titel": "YouTube-Titel, max. 60 Zeichen, macht neugierig, kein Clickbait-Luege",
+  "thema": "{titel}",
+  "titel": "YouTube-Titel, max. 60 Zeichen, macht neugierig, keine Clickbait-Luege",
   "szenen": [{{"text": "...", "suchbegriff_en": "..."}}],
-  "behauptungen": ["..."],
-  "quellen": ["Name der Quelle - URL"],
+  "behauptungen": [{{"aussage": "...", "beleg": "woertliches Zitat aus dem Artikel"}}],
   "beschreibung": "2-3 Saetze, erzaehlt neugierig weiter, endet mit Aufforderung zum Folgen",
   "hashtags": ["#fakten", "#wusstestdu", "..."]
 }}"""
-    text, grounding, modell = gemini(prompt, suche=True)
-    daten = json_aus(text)
-    daten["_grounding"] = grounding
+    daten, modell = ki(prompt, temperatur=0.8)
+    daten["thema"] = titel
     daten["_modell"] = modell
+    daten["_artikel"] = artikel
+    daten["quellen"] = [f"Wikipedia – {titel}: {url}"]
     return daten
 
 
+def _norm(t):
+    t = t.lower().replace("„", '"').replace("“", '"').replace("”", '"').replace("–", "-")
+    return re.sub(r"\s+", " ", re.sub(r"[^\w\s%-]", " ", t)).strip()
+
+
+def beleg_gefunden(beleg, artikel):
+    """Programmatischer Check: steht das Zitat wirklich im Artikel? (kleine Abweichungen ok)"""
+    b, a = _norm(beleg), _norm(artikel)
+    if len(b) < 15:
+        return False
+    if b in a:
+        return True
+    m = difflib.SequenceMatcher(None, a, b, autojunk=False).find_longest_match(0, len(a), 0, len(b))
+    return m.size >= 0.85 * len(b)
+
+
 def faktencheck(daten):
-    behauptungen = "\n".join(f"{i+1}. {b}" for i, b in enumerate(daten["behauptungen"]))
+    artikel = daten["_artikel"]
+    # Stufe 1: Stehen die Zitate wirklich im Artikel?
+    pruefung, alle_ok = [], True
+    for b in daten.get("behauptungen", []):
+        gefunden = beleg_gefunden(b.get("beleg", ""), artikel)
+        pruefung.append({"behauptung": b.get("aussage", ""), "beleg_im_text": gefunden})
+        alle_ok &= gefunden
+    if not daten.get("behauptungen"):
+        alle_ok = False
+    if not alle_ok:
+        log("Stufe 1: mindestens ein Zitat steht NICHT im Artikel.")
+        return False, {"pruefung": pruefung, "gesamt": "nicht_ok"}
+
+    # Stufe 2: Eine (moeglichst andere) KI vergleicht den Sprechtext mit dem Artikel
     sprechtext = " ".join(s["text"] for s in daten["szenen"])
-    prompt = f"""Du bist strenger Faktenpruefer. Pruefe mit der Google-Suche jede Behauptung einzeln.
-Urteil "korrekt" nur, wenn mindestens eine serioese Quelle sie klar bestaetigt.
-Pruefe auch, ob der Sprechtext insgesamt etwas Falsches oder Irrefuehrendes sagt.
+    autor = daten["_modell"].split("/")[0]
+    prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit dem ARTIKEL.
+Jede Aussage im Sprechtext muss durch den Artikel gedeckt sein. Markiere alles, was erfunden,
+uebertrieben, verdreht oder irrefuehrend ist. Stilmittel wie "Wusstest du" oder Fragen sind ok.
+
+ARTIKEL:
+\"\"\"{artikel}\"\"\"
 
 SPRECHTEXT:
 {sprechtext}
 
-BEHAUPTUNGEN:
-{behauptungen}
-
 Antworte NUR mit JSON:
-{{
-  "pruefung": [{{"behauptung": "...", "urteil": "korrekt|falsch|unsicher", "begruendung": "kurz", "quelle": "Name - URL"}}],
-  "gesamt": "ok|nicht_ok"
-}}"""
-    text, grounding, _ = gemini(prompt, suche=True, temperatur=0.1)
-    ergebnis = json_aus(text)
-    ergebnis["_grounding"] = grounding
-    alle_ok = ergebnis.get("gesamt") == "ok" and all(
-        p.get("urteil") == "korrekt" for p in ergebnis.get("pruefung", []))
-    return alle_ok, ergebnis
+{{"probleme": ["konkretes Problem 1", "..."], "gesamt": "ok|nicht_ok"}}"""
+    urteil, pruefer = ki(prompt, temperatur=0.1, nicht=autor)
+    ok = urteil.get("gesamt") == "ok" and not urteil.get("probleme")
+    for p in pruefung:
+        p["urteil"] = "korrekt" if ok else "unsicher"
+    log(f"Stufe 2 ({pruefer}): {'ok' if ok else urteil.get('probleme')}")
+    return ok, {"pruefung": pruefung, "probleme": urteil.get("probleme", []),
+                "gesamt": "ok" if ok else "nicht_ok", "pruefer": pruefer}
 
 
 # ---------------------------------------------------------------- Voiceover
@@ -446,9 +540,7 @@ def telegram_senden(video, daten, check, dauer):
         log("Telegram nicht konfiguriert, ueberspringe.")
         return
     api = f"https://api.telegram.org/bot{TG_TOKEN}"
-    caption = f"🎬 {daten['titel']}\n⏱ {dauer:.0f} s | {daten.get('kategorie', '')}"
-    if OHNE_SUCHE:
-        caption += "\n⚠️ Ohne Live-Google-Suche erstellt: Fakten bitte besonders genau checken!"
+    caption = f"🎬 {daten['titel']}\n⏱ {dauer:.0f} s | {daten['thema']}"
     with open(video, "rb") as f:
         r = requests.post(f"{api}/sendVideo",
                           data={"chat_id": TG_CHAT, "caption": caption[:1000], "supports_streaming": "true"},
@@ -456,12 +548,13 @@ def telegram_senden(video, daten, check, dauer):
     if r.status_code != 200:
         log(f"Telegram-Video-Fehler: {r.text[:300]}")
 
-    pruef = "\n".join(f"{'✅' if p.get('urteil') == 'korrekt' else '⚠️'} {p.get('behauptung')}\n   ↳ {p.get('quelle', '')}"
+    pruef = "\n".join(f"{'✅' if p.get('beleg_im_text') else '⚠️'} {p.get('behauptung')}"
                       for p in check.get("pruefung", []))
     text = (f"📌 TITEL\n{daten['titel']}\n\n"
-            f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n{' '.join(daten.get('hashtags', []))}\n\n"
-            f"🔎 FAKTENCHECK\n{pruef}\n\n"
-            f"📚 QUELLEN\n" + "\n".join(daten.get("quellen", [])))
+            f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
+            f"Quelle: {daten['quellen'][0]}\n\n{' '.join(daten.get('hashtags', []))}\n\n"
+            f"🔎 FAKTENCHECK (Prüfer: {check.get('pruefer', '?')})\n{pruef}\n\n"
+            f"🤖 Geschrieben von: {daten.get('_modell')}")
     requests.post(f"{api}/sendMessage", data={"chat_id": TG_CHAT, "text": text[:4000],
                                               "disable_web_page_preview": "true"}, timeout=60)
 
@@ -470,18 +563,21 @@ def telegram_senden(video, daten, check, dauer):
 def main():
     for d in (OUT, WORK):
         d.mkdir(parents=True, exist_ok=True)
-    if not (GEMINI_KEY and PIXABAY_KEY):
-        sys.exit("GEMINI_API_KEY oder PIXABAY_API_KEY fehlt (GitHub Secrets pruefen).")
+    if not PIXABAY_KEY:
+        sys.exit("PIXABAY_API_KEY fehlt (GitHub Secrets pruefen).")
 
-    benutzt = lade_benutzte()
+    benutzt = set(lade_benutzte())
     daten = check = None
     for versuch in range(1, MAX_VERSUCHE + 1):
         log(f"Versuch {versuch}: suche Thema ...")
         try:
-            kandidat = skript_erstellen(benutzt)
-            if not kandidat["szenen"][0]["text"].lower().startswith("wusstest du"):
-                kandidat["szenen"][0]["text"] = "Wusstest du schon? " + kandidat["szenen"][0]["text"]
-            log(f"Thema: {kandidat['thema']} ({kandidat['kategorie']}) – pruefe Fakten ...")
+            titel = thema_waehlen(benutzt)
+            benutzt.add(titel)
+            kandidat = skript_erstellen(titel)
+            erste = kandidat["szenen"][0]["text"]
+            if not erste.lower().startswith("wusstest du"):
+                kandidat["szenen"][0]["text"] = "Wusstest du schon? " + erste
+            log(f"Skript fertig: {kandidat['titel']} – pruefe Fakten ...")
             ok, ergebnis = faktencheck(kandidat)
         except Exception as e:
             log(f"Fehler: {e}")
@@ -491,13 +587,13 @@ def main():
             log("Faktencheck bestanden ✅")
             break
         log("Faktencheck NICHT bestanden, nehme neues Thema.")
-        benutzt = benutzt + [kandidat.get("thema", "")]
 
     if not daten:
         sys.exit("Kein Thema hat den Faktencheck bestanden. Bitte nochmal starten.")
 
     video, dauer = video_bauen(daten)
-    meta = {**daten, "faktencheck": check, "dauer": round(dauer, 1)}
+    meta = {k: v for k, v in daten.items() if k != "_artikel"}
+    meta.update(faktencheck=check, dauer=round(dauer, 1))
     (OUT / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     speichere_thema(daten["thema"])
     telegram_senden(video, daten, check, dauer)
