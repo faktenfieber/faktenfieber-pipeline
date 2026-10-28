@@ -66,7 +66,7 @@ def _openai_kompatibel(url, key, modell, prompt, temperatur):
         body.pop("response_format")          # manche Modelle mögen den JSON-Modus nicht
         r = requests.post(url, headers={"Authorization": f"Bearer {key}"}, timeout=90, json=body)
     if r.status_code != 200:
-        return r.status_code, r.text[:300], None
+        return r.status_code, r.text[:700], None
     return 200, "", r.json()["choices"][0]["message"]["content"]
 
 
@@ -77,7 +77,7 @@ def _gemini(modell, prompt, temperatur):
                           "generationConfig": {"temperature": temperatur,
                                                "responseMimeType": "application/json"}})
     if r.status_code != 200:
-        return r.status_code, r.text[:300], None
+        return r.status_code, r.text[:700], None
     kand = (r.json().get("candidates") or [{}])[0]
     return 200, "", "".join(p.get("text", "") for p in kand.get("content", {}).get("parts", []))
 
@@ -86,10 +86,11 @@ def _groq_modelle():
     try:
         r = requests.get("https://api.groq.com/openai/v1/models",
                          headers={"Authorization": f"Bearer {GROQ_KEY}"}, timeout=30)
-        ids = [m["id"] for m in r.json().get("data", [])]
+        ids = [m["id"] for m in r.json().get("data", [])
+               if (m.get("context_window") or 32000) >= 16000 and m.get("active", True)]
     except Exception:
         return ["llama-3.3-70b-versatile"]
-    ids = [i for i in ids if not any(x in i for x in ("whisper", "guard", "tts", "prompt", "playai", "compound", "orpheus", "canopylabs", "speech", "audio"))]
+    ids = [i for i in ids if not any(x in i for x in ("whisper", "guard", "tts", "prompt", "playai", "compound", "orpheus", "canopylabs", "speech", "audio", "allam"))]
     vorlieben = ["gpt-oss-120b", "kimi", "llama-4-maverick", "llama-3.3-70b", "qwen", "llama-4", "gpt-oss-20b"]
     ids.sort(key=lambda i: next((n for n, v in enumerate(vorlieben) if v in i), 99))
     return ids[:4]
@@ -134,6 +135,17 @@ def anbieter_laden():
     return liste
 
 
+def wartezeit(info):
+    """Liest 'try again in 13.3s' (Groq) bzw. 'retryDelay': '13s' (Gemini) aus der Fehlermeldung."""
+    m = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", info or "") or \
+        re.search(r'retryDelay"?\s*:\s*"?([\d.]+)s', info or "")
+    if not m:
+        return None
+    if m.lastindex == 2:
+        return float(m.group(1) or 0) * 60 + float(m.group(2))
+    return float(m.group(1))
+
+
 def ki(prompt, temperatur=0.8, nicht=None):
     """Fragt die KI und gibt (json_dict, 'Anbieter/Modell') zurueck.
     nicht = Anbieter, der NICHT genommen werden soll (z. B. damit der Faktencheck unabhaengig ist)."""
@@ -147,7 +159,7 @@ def ki(prompt, temperatur=0.8, nicht=None):
     for name, modell, funk in reihenfolge:
         if GESPERRT.get((name, modell), 0) > time.time():
             continue
-        for versuch in range(2):
+        for versuch in range(3):
             try:
                 code, info, text = funk(modell, prompt, temperatur)
             except requests.RequestException as e:
@@ -161,7 +173,12 @@ def ki(prompt, temperatur=0.8, nicht=None):
                     code, info = 0, f"kaputtes JSON: {e}"
             fehler = f"{name}/{modell}: {code} {info}"
             log(f"KI-Problem -> {fehler}")
-            if code in (429, 500, 502, 503, 0) and versuch == 0:
+            warten = wartezeit(info)
+            if code == 429 and warten and warten <= 65 and versuch < 2:
+                log(f"   Limit pro Minute erreicht -> warte {warten:.0f} s wie verlangt")
+                time.sleep(warten + 1)
+                continue
+            if code in (500, 502, 503, 0) and versuch == 0:
                 time.sleep(8)
                 continue
             # 429/503 = nur voruebergehend (45 s), alles andere (403, 404 ...) = fuer diesen Lauf raus
@@ -194,7 +211,7 @@ def wiki(**params):
     return r.json()
 
 
-def wiki_kandidaten(benutzt, anzahl=8):
+def wiki_kandidaten(benutzt, anzahl=7):
     titel = set()
     for _ in range(6):
         kat = random.choice(WIKI_KATEGORIEN)
@@ -211,7 +228,7 @@ def wiki_kandidaten(benutzt, anzahl=8):
         titel = {m["title"] for m in daten["query"]["random"]}
     titel = list(titel)[:anzahl]
     intros = wiki(prop="extracts", exintro=1, explaintext=1, exlimit=20, titles="|".join(titel))
-    return {p["title"]: p.get("extract", "")[:600] for p in intros["query"]["pages"] if p.get("extract")}
+    return {p["title"]: p.get("extract", "")[:350] for p in intros["query"]["pages"] if p.get("extract")}
 
 
 def wiki_artikel(titel):
@@ -220,7 +237,7 @@ def wiki_artikel(titel):
     text = re.sub(r"\n{2,}", "\n", seite.get("extract", ""))
     # Literatur/Weblinks/Einzelnachweise am Ende abschneiden
     text = re.split(r"\n=+ (Literatur|Weblinks|Einzelnachweise|Anmerkungen) =+", text)[0]
-    return seite["title"], text[:14000], seite.get("fullurl", f"https://de.wikipedia.org/wiki/{titel}")
+    return seite["title"], text[:7000], seite.get("fullurl", f"https://de.wikipedia.org/wiki/{titel}")
 
 
 # ================================================================ Thema + Skript
@@ -243,7 +260,9 @@ def thema_waehlen(benutzt):
     prompt = f"""Du bist Redakteur des deutschen Shorts-Kanals FAKTENFIEBER (verrueckte, wahre Fakten und Geschichten).
 Hier sind Wikipedia-Artikel. Waehle den EINEN, aus dem sich das spannendste 45-Sekunden-Video
 fuer ein breites, junges Publikum machen laesst (ueberraschend, kurios, "das glaubt mir keiner").
-Langweilige Themen (Verwaltung, Listen, reine Biografien ohne Twist) meiden.
+Bevorzuge ECHTE Ereignisse, Phaenomene, Tiere, Orte, Erfindungen, Kriminalfaelle, Katastrophen, Kuriositaeten.
+Meiden: Romane, Filme, Alben, Fiktion, Verwaltung, Listen, Kirchen/Gebaeude ohne Story, Biografien ohne Twist.
+"spannung" ehrlich bewerten: 9-10 nur, wenn ein konkreter Fakt wirklich verblueffend ist.
 
 {liste}
 
@@ -324,15 +343,19 @@ def faktencheck(daten):
     if not daten.get("behauptungen"):
         alle_ok = False
     if not alle_ok:
-        log("Stufe 1: mindestens ein Zitat steht NICHT im Artikel.")
-        return False, {"pruefung": pruefung, "gesamt": "nicht_ok"}
+        fehlend = [f"Zitat steht nicht im Artikel (Aussage: '{b.get('aussage', '')}', angebliches Zitat: '{b.get('beleg', '')}')"
+                   for b in daten.get("behauptungen", []) if not beleg_gefunden(b.get("beleg", ""), artikel)]
+        log(f"Stufe 1: {len(fehlend)} Zitat(e) stehen NICHT im Artikel.")
+        return False, {"pruefung": pruefung, "gesamt": "nicht_ok", "probleme": fehlend or ["Keine Behauptungen angegeben"]}
 
     # Stufe 2: Eine (moeglichst andere) KI vergleicht den Sprechtext mit dem Artikel
     sprechtext = " ".join(s["text"] for s in daten["szenen"])
     autor = daten["_modell"]
     prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit dem ARTIKEL.
-Jede Aussage im Sprechtext muss durch den Artikel gedeckt sein. Markiere alles, was erfunden,
-uebertrieben, verdreht oder irrefuehrend ist. Stilmittel wie "Wusstest du" oder Fragen sind ok.
+Jede FAKTENAUSSAGE im Sprechtext muss durch den Artikel gedeckt sein.
+schwere "faktisch" = erfundene oder falsche Fakten, falsche Zahlen/Daten/Namen, verdrehte Zusammenhaenge.
+schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, "Wusstest du", Spannungsaufbau.
+Melde nur echte Probleme, keine Kleinigkeiten.
 
 ARTIKEL:
 \"\"\"{artikel}\"\"\"
@@ -341,14 +364,47 @@ SPRECHTEXT:
 {sprechtext}
 
 Antworte NUR mit JSON:
-{{"probleme": ["konkretes Problem 1", "..."], "gesamt": "ok|nicht_ok"}}"""
+{{"probleme": [{{"satz": "...", "problem": "...", "schwere": "faktisch|stil"}}]}}"""
     urteil, pruefer = ki(prompt, temperatur=0.1, nicht=autor)
-    ok = urteil.get("gesamt") == "ok" and not urteil.get("probleme")
+    probleme = [p for p in urteil.get("probleme", []) if isinstance(p, dict)]
+    faktisch = [p for p in probleme if p.get("schwere") == "faktisch"]
+    ok = not faktisch
+    urteil["probleme"] = [f"{p.get('problem')} ({p.get('schwere')})" for p in probleme]
     for p in pruefung:
         p["urteil"] = "korrekt" if ok else "unsicher"
     log(f"Stufe 2 ({pruefer}): {'ok' if ok else urteil.get('probleme')}")
     return ok, {"pruefung": pruefung, "probleme": urteil.get("probleme", []),
+                "reparieren": [f"Satz: '{p.get('satz')}' -> {p.get('problem')}" for p in faktisch],
                 "gesamt": "ok" if ok else "nicht_ok", "pruefer": pruefer}
+
+
+def reparieren(daten, ergebnis):
+    """Laesst die KI nur die beanstandeten Stellen korrigieren, statt das Thema wegzuwerfen."""
+    probleme = ergebnis.get("reparieren") or ergebnis.get("probleme") or []
+    entwurf = {k: daten[k] for k in ("titel", "szenen", "behauptungen", "beschreibung", "hashtags") if k in daten}
+    prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
+Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
+Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
+Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 80 bis 125 Woerter.
+
+GEFUNDENE FEHLER:
+{chr(10).join('- ' + str(p) for p in probleme)}
+
+ARTIKEL:
+\"\"\"{daten['_artikel']}\"\"\"
+
+AKTUELLES SKRIPT (JSON):
+{json.dumps(entwurf, ensure_ascii=False)}
+
+Antworte NUR mit dem korrigierten JSON im selben Format."""
+    neu, modell = ki(prompt, temperatur=0.3, nicht=ergebnis.get("pruefer"))
+    if not neu.get("szenen"):
+        raise ValueError("Reparatur lieferte kein Skript")
+    for k in ("titel", "szenen", "behauptungen", "beschreibung", "hashtags"):
+        if neu.get(k):
+            daten[k] = neu[k]
+    daten["_modell"] = modell
+    return daten
 
 
 # ---------------------------------------------------------------- Voiceover
@@ -594,6 +650,12 @@ def main():
                 kandidat["szenen"][0]["text"] = "Wusstest du schon? " + erste
             log(f"Skript fertig: {kandidat['titel']} – pruefe Fakten ...")
             ok, ergebnis = faktencheck(kandidat)
+            for runde in range(1, 3):
+                if ok:
+                    break
+                log(f"Reparatur-Runde {runde}: korrigiere beanstandete Stellen ...")
+                kandidat = reparieren(kandidat, ergebnis)
+                ok, ergebnis = faktencheck(kandidat)
         except Exception as e:
             log(f"Fehler: {e}")
             continue
@@ -615,5 +677,22 @@ def main():
     log(f"FERTIG: {video} ({dauer:.1f} s)")
 
 
+def telegram_text(text):
+    if TG_TOKEN and TG_CHAT:
+        try:
+            requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
+                          data={"chat_id": TG_CHAT, "text": text[:4000]}, timeout=30)
+        except requests.RequestException:
+            pass
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as e:
+        if e.code not in (0, None):
+            telegram_text(f"❌ Faktenfieber: Kein Video erstellt.\n{e.code}")
+        raise
+    except Exception as e:
+        telegram_text(f"❌ Faktenfieber: Fehler im Lauf.\n{e.__class__.__name__}: {e}")
+        raise
