@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v1.6
+FAKTENFIEBER – Pipeline v1.8
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -335,16 +335,19 @@ Strafen, Medizin, Essen, Aberglaube), kuriose historische Ereignisse, verrueckte
 Bevorzuge ECHTE Ereignisse, Phaenomene, Orte, Erfindungen, Kriminalfaelle, Katastrophen, Kuriositaeten.
 Meiden: Romane, Filme, Alben, Fiktion, Verwaltung, Listen, Kirchen/Gebaeude ohne Story, Biografien ohne Twist.
 "spannung" ehrlich bewerten: 9-10 nur, wenn ein konkreter Fakt wirklich verblueffend ist.
+"verstaendlich" bewerten: Versteht ein 14-Jaehriger ohne Vorwissen das Thema in 40 Sekunden? (1-10)
+Waehle nur Themen mit verstaendlich >= 7. Meide Themen, die viel Fachwissen brauchen
+(komplizierte Chemie, Mathematik, Politik-Details, Rechtsfragen, Theologie, Sprachwissenschaft).
 
 {liste}
 
-Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "spannung": 1-10}}"""
+Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "spannung": 1-10, "verstaendlich": 1-10}}"""
     wahl, _ = ki(prompt, temperatur=0.4)
     titel = wahl.get("titel", "")
     if titel not in kandidaten:
         titel = difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten)[:1]
         titel = titel[0]
-    log(f"Gewaehlt: {titel} (Spannung {wahl.get('spannung')}/10) – {wahl.get('warum', '')}")
+    log(f"Gewaehlt: {titel} (Spannung {wahl.get('spannung')}/10, verstaendlich {wahl.get('verstaendlich')}/10) – {wahl.get('warum', '')}")
     return titel
 
 
@@ -369,7 +372,13 @@ STIL:
 - Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook mit dem ueberraschendsten Detail.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
-  Roter Faden, jeder Satz baut auf dem vorherigen auf, nichts Unverstaendliches, keine Fachbegriffe ohne Erklaerung.
+  Roter Faden, jeder Satz baut auf dem vorherigen auf, nichts Unverstaendliches.
+- KOMPLIZIERTES EINFACH MACHEN: Erklaere so, dass es ein 14-Jaehriger sofort versteht.
+  Jeder Fachbegriff, jedes Fremdwort, jeder unbekannte Ort und jede Epoche bekommt sofort eine kurze,
+  einfache Erklaerung ("ein Gasometer, also ein riesiger Speicher fuer Gas"). Lieber ein Detail weglassen
+  als etwas unerklaert lassen. Bildhafte Vergleiche aus dem Alltag sind erlaubt ("so hoch wie ein
+  20-stoeckiges Haus"), aber nur, wenn die Zahlen dahinter aus dem Artikel stammen.
+  Ist das Thema eher kompliziert, darfst du bis zu 120 Woerter nutzen.
 - Aufbau: Hook -> Einordnung (was/wo/wann) -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
 - Bei historischen Themen: Lass den Zuschauer spueren, wie anders das Leben damals war (Vergleich mit heute,
   aber nur mit Fakten aus dem Artikel). Ton: "unnuetzes Wissen", das man beim naechsten Treffen erzaehlen will.
@@ -401,7 +410,7 @@ Antworte NUR mit JSON:
   "beschreibung": "2-3 Saetze, erzaehlt neugierig weiter, endet mit Aufforderung zum Folgen",
   "hashtags": ["#fakten", "#wusstestdu", "..."],
   "musik_stimmung": "eins von: spannend, mysterioes, dramatisch, froehlich, episch, historisch, kurios, ruhig",
-  "hook_text": "Texteinblendung fuer die ersten 3 Sekunden: max. 6 Woerter, der krasseste Fakt, wahr laut Artikel",
+  "hook_text": "Texteinblendung fuer die ersten Sekunden: max. 6 Woerter, der krasseste Fakt, wahr laut Artikel",
   "kommentar_frage": "kurze Frage an die Zuschauer fuer die Kommentare, passend zum Thema"
 }}"""
     daten, modell = ki(prompt, temperatur=0.8)
@@ -453,7 +462,8 @@ def faktencheck(daten):
     prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit dem ARTIKEL.
 Jede FAKTENAUSSAGE im Sprechtext muss durch den Artikel gedeckt sein.
 schwere "faktisch" = erfundene oder falsche Fakten, falsche Zahlen/Daten/Namen, verdrehte Zusammenhaenge.
-schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, "Wusstest du", Spannungsaufbau.
+schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, "Wusstest du", Spannungsaufbau,
+einfache Erklaerungen von Begriffen und veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen).
 Melde nur echte Probleme, keine Kleinigkeiten.
 
 ARTIKEL:
@@ -701,7 +711,10 @@ def hook_umbruch(text, max_zeichen=16):
     return zeilen[:3]
 
 
-def untertitel_schreiben(eintraege, ziel, hook_text="", hook_dauer=3.0):
+HOOK_DAUER = float(os.environ.get("HOOK_SEKUNDEN", "5.5"))
+
+
+def untertitel_schreiben(eintraege, ziel, hook_text="", hook_dauer=HOOK_DAUER):
     """eintraege = [(woerter=[(wort, start, ende)], start, ende)]
     Karaoke-Stil: das gerade gesprochene Wort leuchtet gelb. Oben zusaetzlich der Hook-Text."""
     kopf = f"""[Script Info]
@@ -865,42 +878,113 @@ def _openverse(q, nur_musik=True):
             and ((t.get("duration") or 60000) >= 40000)]
 
 
-def _ccmixter(tag):
-    try:
-        r = requests.get("https://ccmixter.org/api/query", headers=WIKI_HEADERS, timeout=30,
-                         params={"f": "json", "tags": tag, "lic": "by", "limit": 30, "sort": "rank"})
-        liste = r.json() if r.status_code == 200 else []
-    except Exception as e:
-        log(f"ccMixter nicht erreichbar: {e.__class__.__name__}")
-        return []
-    out = []
-    for t in liste if isinstance(liste, list) else []:
-        mp3 = [f for f in t.get("files", []) if str(f.get("download_url", "")).endswith(".mp3")]
-        if mp3:
-            out.append({"id": f"cc{t.get('upload_id')}", "url": mp3[0]["download_url"], "title": t.get("upload_name"),
-                        "creator": t.get("user_name"), "license": "by", "license_version": "",
-                        "landing": t.get("file_page_url", ""), "tags": tag, "dauer": 0})
-    return out
-
-
 def _nachweis(t):
     lizenz = "gemeinfrei (CC0)" if t["license"] in ("cc0", "pdm") else f"CC {t['license'].upper()} {t['license_version']}".strip()
     return f"„{t['title']}“ von {t['creator']} – {lizenz} – {t['landing']}".strip(" –")
 
 
-def _laden(t):
+ARCHIV_THEMEN = {
+    "spannend": ["cinematic", "soundtrack", "suspense", "dark ambient"],
+    "mysterioes": ["dark ambient", "ambient", "drone", "mystery"],
+    "dramatisch": ["cinematic", "orchestral", "soundtrack", "dramatic"],
+    "froehlich": ["acoustic", "happy", "folk", "ukulele"],
+    "episch": ["orchestral", "epic", "cinematic", "soundtrack"],
+    "historisch": ["classical", "baroque", "medieval", "piano"],
+    "kurios": ["quirky", "jazz", "acoustic", "chiptune"],
+    "ruhig": ["ambient", "piano", "chill", "lofi"],
+}
+ARCHIV_ENTSPANNT = ["ambient", "piano", "chill", "lofi", "relaxing"]
+ARCHIV_LIZENZ = ('(licenseurl:*publicdomain/zero* OR licenseurl:*publicdomain/mark* OR '
+                 'licenseurl:*licenses/by/* OR licenseurl:*licenses/by-sa/*)')
+
+
+def _archive(themen):
+    """Internet Archive (archive.org): riesige, zuverlaessige Sammlung freier Musik, ohne Key."""
+    teil = " OR ".join(f'subject:"{t}"' for t in themen)
     try:
-        daten = requests.get(t["url"], headers=WIKI_HEADERS, timeout=60).content
-    except requests.RequestException:
+        r = requests.get("https://archive.org/advancedsearch.php", headers=WIKI_HEADERS, timeout=40, params={
+            "q": f"mediatype:audio AND {ARCHIV_LIZENZ} AND ({teil}) AND NOT subject:podcast",
+            "fl[]": ["identifier", "title", "creator", "licenseurl", "subject"],
+            "rows": 60, "sort[]": "downloads desc", "output": "json"})
+        if r.status_code != 200:
+            log(f"Archive.org antwortet {r.status_code}")
+            return []
+        docs = r.json().get("response", {}).get("docs", [])
+    except Exception as e:
+        log(f"Archive.org nicht erreichbar: {e.__class__.__name__}")
+        return []
+    out = []
+    for d in docs:
+        lic = str(d.get("licenseurl", ""))
+        art = "cc0" if "publicdomain" in lic else ("by-sa" if "by-sa" in lic else "by")
+        version = (re.search(r"/(\d\.\d)", lic) or [None, ""])[1]
+        subj = d.get("subject", "")
+        out.append({"id": f"ia_{d['identifier']}", "archive_id": d["identifier"], "url": None,
+                    "title": d.get("title") or d["identifier"], "creator": (d.get("creator") or "unbekannt")
+                    if isinstance(d.get("creator"), str) else ", ".join(d.get("creator", [])[:2]),
+                    "license": art, "license_version": version,
+                    "landing": f"https://archive.org/details/{d['identifier']}",
+                    "tags": ", ".join(subj[:6]) if isinstance(subj, list) else str(subj)[:80], "dauer": 0})
+    log(f"Archive.org ({', '.join(themen[:2])}…): {len(out)} Alben gefunden")
+    return out
+
+
+def _archive_datei(t):
+    """Waehlt im Archive-Album einen passenden MP3-Track (1-6 Minuten)."""
+    try:
+        meta = requests.get(f"https://archive.org/metadata/{t['archive_id']}", headers=WIKI_HEADERS, timeout=40).json()
+    except Exception:
         return None
-    if len(daten) < 150_000 or daten[:15].lstrip().startswith(b"<"):
+    def sekunden(x):
+        try:
+            if ":" in str(x):
+                teile = [float(p) for p in str(x).split(":")]
+                return sum(v * 60 ** i for i, v in enumerate(reversed(teile)))
+            return float(x)
+        except ValueError:
+            return 0
+    mp3 = [f for f in meta.get("files", []) if str(f.get("name", "")).lower().endswith(".mp3")
+           and 60 <= sekunden(f.get("length", 0)) <= 420]
+    if not mp3:
+        mp3 = [f for f in meta.get("files", []) if str(f.get("name", "")).lower().endswith(".mp3")
+               and 100_000 < int(f.get("size", 0) or 0) < 15_000_000]
+    if not mp3:
+        return None
+    f = random.choice(mp3[:12])
+    if f.get("title"):
+        t["title"] = f"{f['title']} ({t['title']})"
+    return f"https://archive.org/download/{t['archive_id']}/{requests.utils.quote(f['name'])}"
+
+
+def _laden(t):
+    url = t.get("url") or (_archive_datei(t) if t.get("archive_id") else None)
+    if not url:
+        log(f"   ✗ {t['title'][:50]}: keine MP3-Datei gefunden")
+        return None
+    try:
+        r = requests.get(url, headers=WIKI_HEADERS, timeout=90)
+    except requests.RequestException as e:
+        log(f"   ✗ {t['title'][:50]}: Download-Fehler {e.__class__.__name__}")
+        return None
+    daten = r.content
+    if r.status_code != 200 or len(daten) < 150_000 or daten[:15].lstrip().startswith(b"<"):
+        log(f"   ✗ {t['title'][:50]}: HTTP {r.status_code}, {len(daten)} Bytes – kein brauchbares Audio")
         return None
     MUSIK_CACHE.mkdir(parents=True, exist_ok=True)
-    ziel = MUSIK_CACHE / f"{re.sub(r'[^A-Za-z0-9]', '', t['id'])[:24]}.mp3"
+    ziel = MUSIK_CACHE / f"{re.sub(r'[^A-Za-z0-9]', '', t['id'])[:30]}.mp3"
     ziel.write_bytes(daten)
+    # Probe: kann ffmpeg das lesen?
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(ziel)],
+                           capture_output=True, text=True)
+    try:
+        if float(probe.stdout.strip() or 0) < 20:
+            raise ValueError
+    except ValueError:
+        log(f"   ✗ {t['title'][:50]}: Datei nicht abspielbar")
+        ziel.unlink(missing_ok=True)
+        return None
     index = _lade_json(MUSIK_CACHE / "index.json") or {}
     index[ziel.name] = {"nachweis": _nachweis(t), "stimmung": t.get("_stimmung", ""), "tags": t.get("tags", "")}
-    # Cache begrenzen (aelteste raus)
     for alt in list(index)[:-MUSIK_CACHE_MAX]:
         (MUSIK_CACHE / alt).unlink(missing_ok=True)
         index.pop(alt, None)
@@ -909,68 +993,78 @@ def _laden(t):
 
 
 def musik_waehlen(daten):
-    """Die KI waehlt aus mehreren frei lizenzierten Tracks den passendsten aus.
-    Klappt das nicht: leichte, entspannte Musik. Notfalls ein Track aus dem eigenen Musik-Archiv."""
+    """Die KI waehlt aus frei lizenzierten Tracks den passendsten. Sonst entspannte Musik,
+    sonst ein Track aus dem selbst gesammelten Archiv, und als allerletztes ein selbst erzeugter Ambient-Teppich."""
     global MUSIKNACHWEIS
     stimmung = str(daten.get("musik_stimmung", "spannend")).lower()
+    if stimmung not in ARCHIV_THEMEN:
+        stimmung = "spannend"
     zuletzt = set((_lade_json(USED_MUSIK) or [])[-12:])
-
-    for runde, suchbegriffe in enumerate([STIMMUNG_SUCHE.get(stimmung, STIMMUNG_SUCHE["spannend"]), ENTSPANNT]):
+    runden = [(STIMMUNG_SUCHE.get(stimmung, STIMMUNG_SUCHE["spannend"]), ARCHIV_THEMEN[stimmung], stimmung),
+              (ENTSPANNT, ARCHIV_ENTSPANNT, "ruhig")]
+    for runde, (openverse_q, archiv_q, label) in enumerate(runden):
         kandidaten = {}
-        for q in random.sample(suchbegriffe, min(3, len(suchbegriffe))):
-            for t in _openverse(q) or _openverse(q, nur_musik=False):
-                if t["id"] not in zuletzt:
-                    t["_stimmung"] = stimmung if runde == 0 else "ruhig"
-                    kandidaten[t["id"]] = t
-        if not kandidaten:
-            for tag in (["cinematic", "instrumental"] if runde == 0 else ["ambient", "chill"]):
-                for t in _ccmixter(tag):
-                    if t["id"] not in zuletzt:
-                        t["_stimmung"] = stimmung if runde == 0 else "ruhig"
-                        kandidaten[t["id"]] = t
-        log(f"Musik-Kandidaten ({'passend: ' + stimmung if runde == 0 else 'entspannt'}): {len(kandidaten)}")
-        if not kandidaten:
+        for t in _archive(archiv_q):
+            kandidaten[t["id"]] = t
+        for q in random.sample(openverse_q, min(2, len(openverse_q))):
+            for t in _openverse(q):
+                kandidaten[t["id"]] = t
+        for t in kandidaten.values():
+            t["_stimmung"] = label
+        liste = [t for t in kandidaten.values() if t["id"] not in zuletzt] or list(kandidaten.values())
+        log(f"Musik-Kandidaten ({label}): {len(liste)}")
+        if not liste:
             continue
-        liste = list(kandidaten.values())
         random.shuffle(liste)
-        liste = liste[:15]
+        liste = liste[:18]
         reihenfolge = liste
-        if runde == 0:
-            try:
-                auswahl = "\n".join(f"{i}: {t['title']} | Tags: {t['tags']} | {t['dauer']} s" for i, t in enumerate(liste))
-                prompt = f"""Du bist Musik-Supervisor fuer einen YouTube-Short ueber: "{daten.get('titel')}" ({daten.get('thema')}).
-Gewuenschte Stimmung: {stimmung}. Die Musik laeuft LEISE unter einer Erzaehlstimme.
-Waehle die 3 passendsten Tracks (Atmosphaere, Epoche, Tempo). Meide Gesang, Rap, Lyrics, Weihnachtslieder, Fanfaren.
+        try:
+            auswahl = "\n".join(f"{i}: {t['title'][:70]} | {t['tags'][:60]}" for i, t in enumerate(liste))
+            prompt = f"""Du bist Musik-Supervisor fuer einen YouTube-Short ueber: "{daten.get('titel')}" ({daten.get('thema')}).
+Gewuenschte Stimmung: {label}. Die Musik laeuft LEISE unter einer Erzaehlstimme.
+Waehle die 4 passendsten Tracks/Alben (Atmosphaere, Epoche, Tempo). Meide Gesang, Rap, Hoerspiele,
+Podcasts, Lesungen, Weihnachtslieder, Noise und Field-Recordings.
 
 {auswahl}
 
-Antworte NUR mit JSON: {{"auswahl": [Nummer1, Nummer2, Nummer3], "warum": "1 Satz"}}"""
-                wahl, _ = ki(prompt, temperatur=0.3)
-                nummern = [int(n) for n in wahl.get("auswahl", []) if str(n).isdigit() and int(n) < len(liste)]
-                reihenfolge = [liste[n] for n in nummern] + [t for i, t in enumerate(liste) if i not in nummern]
-                log(f"KI-Musikwahl: {wahl.get('warum', '')}")
-            except Exception as e:
-                log(f"KI-Musikwahl nicht moeglich ({e.__class__.__name__}), nehme Zufall")
-        for t in reihenfolge[:6]:
+Antworte NUR mit JSON: {{"auswahl": [Nummer1, Nummer2, Nummer3, Nummer4], "warum": "1 Satz"}}"""
+            wahl, _ = ki(prompt, temperatur=0.3)
+            nummern = [int(n) for n in wahl.get("auswahl", []) if str(n).isdigit() and int(n) < len(liste)]
+            reihenfolge = [liste[n] for n in nummern] + [t for i, t in enumerate(liste) if i not in nummern]
+            log(f"KI-Musikwahl: {wahl.get('warum', '')}")
+        except Exception as e:
+            log(f"KI-Musikwahl nicht moeglich ({e.__class__.__name__}), nehme Zufall")
+        for t in reihenfolge[:8]:
             pfad = _laden(t)
             if pfad:
                 _merke_musik(t["id"])
                 MUSIKNACHWEIS = _nachweis(t)
-                log(f"Musik: {MUSIKNACHWEIS}")
+                log(f"🎵 Musik: {MUSIKNACHWEIS}")
                 return pfad
 
-    # Notfall: aus dem selbst gesammelten Archiv (bevorzugt ruhige Tracks)
     index = _lade_json(MUSIK_CACHE / "index.json") or {}
     archiv = [(n, i) for n, i in index.items() if (MUSIK_CACHE / n).exists()]
     if archiv:
         ruhig = [a for a in archiv if a[1].get("stimmung") == "ruhig"] or archiv
         name, info = random.choice(ruhig)
         MUSIKNACHWEIS = info.get("nachweis", "")
-        log(f"Musik aus dem Archiv: {name}")
+        log(f"🎵 Musik aus dem eigenen Archiv: {name}")
         return MUSIK_CACHE / name
-    log("Keine Musik verfuegbar, Video ohne Musik.")
+
+    log("🎵 Keine Musik online gefunden -> erzeuge ruhigen Ambient-Teppich")
     MUSIKNACHWEIS = ""
-    return None
+    return ambient_erzeugen(WORK / "ambient.wav")
+
+
+def ambient_erzeugen(ziel, dauer=90):
+    """Notfall-Musik, selbst erzeugt: weicher Akkord-Teppich mit langsamem Schweben (lizenzfrei)."""
+    akkorde = random.choice([(220.0, 261.63, 329.63, 392.0), (196.0, 246.94, 293.66, 369.99),
+                             (174.61, 220.0, 261.63, 329.63), (164.81, 207.65, 246.94, 329.63)])
+    toene = "+".join(f"0.18*sin(2*PI*{f}*t)*(0.6+0.4*sin(2*PI*{0.05 + i * 0.03:.2f}*t))"
+                     for i, f in enumerate(akkorde))
+    ffmpeg("-f", "lavfi", "-i", f"aevalsrc='{toene}':s=44100:d={dauer}",
+           "-af", "lowpass=f=1800,aecho=0.8:0.7:120|260:0.35|0.25,volume=1.4", "-ac", "2", ziel)
+    return ziel
 
 
 def audio_mischen(stimme, musik, gesamt, ziel):
