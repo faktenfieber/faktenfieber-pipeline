@@ -1,0 +1,28 @@
+name: Status
+
+# Schickt dir den ausfuehrlichen Status nach Telegram (/status).
+# Liest nur – deshalb keine Warteschlange, kommt immer sofort.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Code holen (immer der neueste Stand)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Status schicken
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          YT_SICHTBARKEIT: ${{ vars.YT_SICHTBARKEIT || 'private' }}
+        run: |
+          pip install -q requests
+          python faktenfieber.py status
