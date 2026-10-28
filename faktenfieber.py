@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v1.9.1
+FAKTENFIEBER – Pipeline v2.0
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1397,6 +1397,64 @@ def youtube_hochladen(video, daten, sichtbarkeit="private"):
     return vid
 
 
+# ---------------------------------------------------------------- Instagram-Upload (Reels)
+IG_TOKEN = os.environ.get("IG_ACCESS_TOKEN", "")
+IG_USER = os.environ.get("IG_USER_ID", "")
+IG_API = "https://graph.instagram.com"
+
+
+def instagram_caption(daten):
+    hashtags = [h if h.startswith("#") else f"#{h}" for h in daten.get("hashtags", [])][:25]
+    teile = [daten["titel"], "", daten.get("beschreibung", "")]
+    if daten.get("kommentar_frage"):
+        teile += ["", f"💬 {daten['kommentar_frage']}"]
+    teile += ["", f"📚 Quelle: {daten['quellen'][0]}"]
+    if daten.get("bildnachweise"):
+        teile += ["📸 " + "; ".join(daten["bildnachweise"])]
+    if daten.get("musiknachweis"):
+        teile += [f"🎵 Musik: {daten['musiknachweis']}"]
+    teile += ["", " ".join(hashtags)]
+    return "\n".join(teile)[:2150]
+
+
+def instagram_hochladen(video, daten):
+    """Reel hochladen: Container anlegen -> Datei hochladen -> warten bis verarbeitet -> veroeffentlichen."""
+    if not (IG_TOKEN and IG_USER):
+        raise RuntimeError("Instagram-Secrets fehlen (IG_ACCESS_TOKEN, IG_USER_ID)")
+    r = requests.post(f"{IG_API}/{IG_USER}/media", timeout=60, data={
+        "media_type": "REELS", "upload_type": "resumable", "caption": instagram_caption(daten),
+        "share_to_feed": "true", "access_token": IG_TOKEN})
+    if r.status_code != 200 or "id" not in r.json():
+        raise RuntimeError(f"Instagram-Container fehlgeschlagen: {r.status_code} {r.text[:400]}")
+    container = r.json()["id"]
+    upload_url = r.json().get("uri") or f"https://rupload.facebook.com/ig-api-upload/{container}"
+    groesse = Path(video).stat().st_size
+    with open(video, "rb") as f:
+        r = requests.post(upload_url, data=f, timeout=600, headers={
+            "Authorization": f"OAuth {IG_TOKEN}", "offset": "0", "file_size": str(groesse)})
+    if r.status_code != 200:
+        raise RuntimeError(f"Instagram-Datei-Upload fehlgeschlagen: {r.status_code} {r.text[:400]}")
+    for _ in range(40):                          # bis zu ~10 Minuten auf die Verarbeitung warten
+        time.sleep(15)
+        st = requests.get(f"{IG_API}/{container}", timeout=30,
+                          params={"fields": "status_code,status", "access_token": IG_TOKEN}).json()
+        if st.get("status_code") == "FINISHED":
+            break
+        if st.get("status_code") in ("ERROR", "EXPIRED"):
+            raise RuntimeError(f"Instagram-Verarbeitung fehlgeschlagen: {st}")
+    else:
+        raise RuntimeError("Instagram-Verarbeitung dauert zu lange")
+    r = requests.post(f"{IG_API}/{IG_USER}/media_publish", timeout=60,
+                      data={"creation_id": container, "access_token": IG_TOKEN})
+    if r.status_code != 200:
+        raise RuntimeError(f"Instagram-Veroeffentlichung fehlgeschlagen: {r.status_code} {r.text[:400]}")
+    media = r.json()["id"]
+    link = requests.get(f"{IG_API}/{media}", timeout=30,
+                        params={"fields": "permalink", "access_token": IG_TOKEN}).json().get("permalink", "")
+    log(f"Instagram-Upload ok: {link or media}")
+    return link or media
+
+
 # ---------------------------------------------------------------- Main
 def main():
     for d in (OUT, WORK):
@@ -1449,6 +1507,13 @@ def main():
         except Exception as e:
             log(f"YouTube-Fehler: {e}")
             telegram_text(f"❌ YouTube-Upload fehlgeschlagen:\n{e}")
+    if os.environ.get("IG_UPLOAD") == "1":
+        try:
+            link = instagram_hochladen(video, daten)
+            telegram_text(f"📸 Auf Instagram veröffentlicht:\n{link}")
+        except Exception as e:
+            log(f"Instagram-Fehler: {e}")
+            telegram_text(f"❌ Instagram-Upload fehlgeschlagen:\n{e}")
     log(f"FERTIG: {video} ({dauer:.1f} s)")
 
 
