@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v3.2
+FAKTENFIEBER – Pipeline v3.4
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1719,24 +1719,31 @@ def erstelle_video():
     return video, daten, check, dauer
 
 
-def veroeffentlichen(video, daten):
-    """Laedt auf YouTube + Instagram hoch und meldet das Ergebnis in Telegram. Gibt Ergebnis-Dict zurueck."""
+def veroeffentlichen(video, daten, einzeln=True):
+    """Laedt auf YouTube + Instagram hoch. einzeln=True: jede Plattform meldet sich sofort in Telegram.
+    Fehler werden immer gemeldet. Gibt Ergebnis-Dict zurueck."""
     ergebnis = {}
     try:
         vid = youtube_hochladen(video, daten)
         ergebnis["youtube"] = f"https://youtube.com/shorts/{vid}"
         hinweis = ("" if os.environ.get("YT_SICHTBARKEIT") == "public" else
                    "\n(noch privat: bitte in der YouTube-Studio-App auf „Öffentlich“ stellen, bis das Audit durch ist)")
-        telegram_text(f"▶️ YouTube: {ergebnis['youtube']}{hinweis}")
+        if einzeln:
+            telegram_text(f"▶️ YouTube: {ergebnis['youtube']}{hinweis}")
     except Exception as e:
         log(f"YouTube-Fehler: {e}")
-        telegram_text(f"❌ YouTube-Upload fehlgeschlagen:\n{e}")
+        ergebnis["youtube_fehler"] = str(e)[:300]
+        if einzeln:
+            telegram_text(f"❌ YouTube-Upload fehlgeschlagen:\n{e}")
     try:
         ergebnis["instagram"] = instagram_hochladen(video, daten)
-        telegram_text(f"📸 Instagram: {ergebnis['instagram']}")
+        if einzeln:
+            telegram_text(f"📸 Instagram: {ergebnis['instagram']}")
     except Exception as e:
         log(f"Instagram-Fehler: {e}")
-        telegram_text(f"❌ Instagram-Upload fehlgeschlagen:\n{e}")
+        ergebnis["instagram_fehler"] = str(e)[:300]
+        if einzeln:
+            telegram_text(f"❌ Instagram-Upload fehlgeschlagen:\n{e}")
     return ergebnis
 
 
@@ -1755,7 +1762,7 @@ from zoneinfo import ZoneInfo
 
 ZEITZONE = ZoneInfo("Europe/Vienna")
 SLOTS = [(8, 0), (18, 0)]                        # Posting-Zeiten
-VERFALL_STUNDEN = 3                              # so lange nach dem Slot darf noch freigegeben werden
+VERFALL_VOR_NAECHSTEM = timedelta(hours=2, minutes=30)   # Freigabe moeglich, bis das naechste Video gebaut wird
 MAX_NEU = 3                                      # so oft darf pro Slot "Neu machen" gedrueckt werden
 STATUS_DATEI = ROOT / "data" / "status.json"
 GH_REPO = os.environ.get("GITHUB_REPOSITORY", "")
@@ -1764,6 +1771,12 @@ GH_TOKEN = os.environ.get("GITHUB_TOKEN", "")
 
 def jetzt():
     return datetime.now(ZEITZONE)
+
+
+def verfall_zeit(slot):
+    """Ein Video kann freigegeben werden, bis das Video fuer den naechsten Termin gebaut wird:
+    8-Uhr-Video bis ca. 15:30, 18-Uhr-Video bis ca. 5:30 am naechsten Morgen. So wartet nie mehr als eins."""
+    return slot_zeit(naechster_slot(ab=slot_zeit(slot))) - VERFALL_VOR_NAECHSTEM
 
 
 def slot_zeit(slot):
@@ -1876,9 +1889,10 @@ def modus_pruefen():
         if eintrag.get("status") == "freigegeben" and jetzt() >= zeit - timedelta(minutes=3):
             try:
                 video, meta = _artefakt_laden(eintrag["run_id"])
-                ergebnis = veroeffentlichen(video, meta)
+                ergebnis = veroeffentlichen(video, meta, einzeln=False)
                 eintrag["status"] = "gepostet"
                 eintrag["links"] = ergebnis
+                posting_melden(eintrag, meta, ergebnis)
                 log(f"{slot}: gepostet {ergebnis}")
             except Exception as e:
                 eintrag["fehler"] = eintrag.get("fehler", 0) + 1
@@ -1888,7 +1902,7 @@ def modus_pruefen():
                     telegram_text(f"❌ Video für {slot} konnte nicht gepostet werden:\n{e}")
             status_speichern(st)                  # sofort sichern, damit nie doppelt gepostet wird
         elif eintrag.get("status") == "wartet":
-            if jetzt() > zeit + timedelta(hours=VERFALL_STUNDEN):
+            if jetzt() > verfall_zeit(slot):
                 eintrag["status"] = "verfallen"
                 tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
                    reply_markup=json.dumps({"inline_keyboard": [[{"text": "⌛ Verfallen", "callback_data": "x"}]]}))
@@ -1897,6 +1911,11 @@ def modus_pruefen():
                 eintrag["erinnert"] = True
                 telegram_text(f"⏰ Erinnerung: Das Video für {slot.split(' ')[1]} Uhr wartet noch auf deine Freigabe "
                               f"(siehe oben ✅ / ❌).")
+            elif jetzt() > zeit + timedelta(hours=1) and not eintrag.get("erinnert2"):
+                eintrag["erinnert2"] = True
+                bis = verfall_zeit(slot).strftime("%H:%M")
+                telegram_text(f"👀 Das {slot.split(' ')[1]}-Uhr-Video ist noch nicht freigegeben. Wenn du jetzt ✅ drückst, "
+                              f"geht es sofort raus (möglich bis {bis} Uhr).")
 
     # 3) Instagram-Token rechtzeitig verlaengern (laeuft sonst nach 60 Tagen ab)
     try:
@@ -1904,6 +1923,31 @@ def modus_pruefen():
     except Exception as e:
         log(f"Instagram-Token-Verlaengerung: {e}")
     status_speichern(st)
+
+
+def posting_melden(eintrag, meta, ergebnis):
+    """Eine klare Bestaetigung nach jedem Posting, als Antwort direkt auf das Video in Telegram."""
+    um = jetzt().strftime("%H:%M")
+    zeilen = []
+    if ergebnis.get("youtube"):
+        privat = os.environ.get("YT_SICHTBARKEIT", "private") != "public"
+        zeilen.append(f"▶️ YouTube{' (privat – bitte in der Studio-App auf Öffentlich stellen)' if privat else ''}:\n"
+                      f"{ergebnis['youtube']}")
+    else:
+        zeilen.append(f"❌ YouTube hat nicht geklappt:\n{ergebnis.get('youtube_fehler', 'unbekannter Fehler')}")
+    if ergebnis.get("instagram"):
+        zeilen.append(f"📸 Instagram:\n{ergebnis['instagram']}")
+    else:
+        zeilen.append(f"❌ Instagram hat nicht geklappt:\n{ergebnis.get('instagram_fehler', 'unbekannter Fehler')}")
+    alles_ok = ergebnis.get("youtube") and ergebnis.get("instagram")
+    kopf = (f"🎉 Gepostet um {um} Uhr!" if alles_ok else
+            f"⚠️ Teilweise gepostet um {um} Uhr" if (ergebnis.get("youtube") or ergebnis.get("instagram")) else
+            f"❌ Posten um {um} Uhr fehlgeschlagen")
+    tg("sendMessage", chat_id=TG_CHAT, text=f"{kopf}\n„{meta.get('titel', '')}“\n\n" + "\n\n".join(zeilen),
+       reply_to_message_id=eintrag.get("message_id") or "", disable_web_page_preview="true")
+    knopf = f"🎉 Gepostet um {um} Uhr" if alles_ok else f"⚠️ Gepostet um {um} Uhr (mit Fehlern)"
+    tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+       reply_markup=json.dumps({"inline_keyboard": [[{"text": knopf, "callback_data": "x"}]]}))
 
 
 def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
