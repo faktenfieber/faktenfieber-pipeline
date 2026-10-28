@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v0.5
+FAKTENFIEBER – Pipeline v1.0
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -408,69 +408,157 @@ Antworte NUR mit dem korrigierten JSON im selben Format."""
 
 
 # ---------------------------------------------------------------- Voiceover
-def stimme_laden():
+# 1. Wahl: Gemini-TTS (natuerliche, betonte Stimme, gratis) – 2. Wahl: Piper (offline, robotischer)
+TTS_STIMME = os.environ.get("TTS_STIMME", "Fenrir")      # Gemini-Stimmen: Fenrir, Puck, Charon, Orus, Kore, Zephyr ...
+TTS_MODELLE = [m for m in (os.environ.get("TTS_MODEL", ""), "gemini-3.1-flash-tts-preview",
+                           "gemini-2.5-flash-preview-tts") if m]
+TTS_STIL = os.environ.get("TTS_STIL", (
+    "Lies den folgenden deutschen Text wie ein packender Erzaehler eines erfolgreichen YouTube-Shorts-Kanals vor: "
+    "zuegiges Tempo, energiegeladen, neugierig, natuerliche Betonung, kleine Spannungspausen vor der Pointe. "
+    "Lies nur den Text vor, sonst nichts:"))
+STIMME_GENUTZT = "?"
+
+
+def gemini_tts(text, ziel):
+    if not GEMINI_KEY:
+        raise RuntimeError("kein GEMINI_API_KEY")
+    import base64
+    body = {
+        "contents": [{"parts": [{"text": f"{TTS_STIL}\n\n{text}"}]}],
+        "generationConfig": {
+            "responseModalities": ["AUDIO"],
+            "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": TTS_STIMME}}},
+        },
+    }
+    fehler = ""
+    for modell in TTS_MODELLE:
+        for versuch in range(3):
+            try:
+                r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{modell}:generateContent",
+                                  params={"key": GEMINI_KEY}, json=body, timeout=180)
+            except requests.RequestException as e:
+                fehler = f"{modell}: {e.__class__.__name__}"
+                time.sleep(10)
+                continue
+            if r.status_code == 200:
+                teile = (r.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+                audio = next((p["inlineData"] for p in teile if "inlineData" in p), None)
+                if audio:
+                    rate = int((re.search(r"rate=(\d+)", audio.get("mimeType", "")) or [0, 24000])[1])
+                    with wave.open(str(ziel), "wb") as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(rate)
+                        wf.writeframes(base64.b64decode(audio["data"]))
+                    return f"Gemini-TTS/{modell}/{TTS_STIMME}"
+                fehler = f"{modell}: Antwort ohne Audio"
+                break
+            fehler = f"{modell}: {r.status_code} {r.text[:300]}"
+            log(f"TTS-Problem -> {fehler}")
+            warten = wartezeit(r.text)
+            if r.status_code == 429 and warten and warten <= 65:
+                time.sleep(warten + 1)
+                continue
+            if r.status_code in (500, 503):
+                time.sleep(10)
+                continue
+            break
+    raise RuntimeError(f"Gemini-TTS nicht verfuegbar ({fehler})")
+
+
+def piper_tts(text, ziel):
     from piper import PiperVoice
     sprache, sprecher, qualitaet = VOICE_NAME.split("-")
-    familie = sprache.split("_")[0]
     basis = (f"https://huggingface.co/rhasspy/piper-voices/resolve/main/"
-             f"{familie}/{sprache}/{sprecher}/{qualitaet}/{VOICE_NAME}")
-    modell = WORK / f"{VOICE_NAME}.onnx"
+             f"{sprache.split('_')[0]}/{sprache}/{sprecher}/{qualitaet}/{VOICE_NAME}")
     for endung in (".onnx", ".onnx.json"):
-        ziel = WORK / f"{VOICE_NAME}{endung}"
-        if not ziel.exists():
-            log(f"Lade Stimme {ziel.name} ...")
+        datei = WORK / f"{VOICE_NAME}{endung}"
+        if not datei.exists():
             r = requests.get(basis + endung, timeout=300)
             r.raise_for_status()
-            ziel.write_bytes(r.content)
-    return PiperVoice.load(str(modell))
-
-
-def sprich(stimme, text, pfad):
-    with wave.open(str(pfad), "wb") as wf:
-        if hasattr(stimme, "synthesize_wav"):          # piper-tts >= 1.3
+            datei.write_bytes(r.content)
+    stimme = PiperVoice.load(str(WORK / f"{VOICE_NAME}.onnx"))
+    with wave.open(str(ziel), "wb") as wf:
+        if hasattr(stimme, "synthesize_wav"):
             try:
                 from piper import SynthesisConfig
                 stimme.synthesize_wav(text, wf, syn_config=SynthesisConfig(length_scale=LENGTH_SCALE))
             except ImportError:
                 stimme.synthesize_wav(text, wf)
-        else:                                          # aeltere Versionen
+        else:
             stimme.synthesize(text, wf, length_scale=LENGTH_SCALE)
+    return f"Piper/{VOICE_NAME}"
+
+
+def wav_dauer(pfad):
     with wave.open(str(pfad), "rb") as wf:
         return wf.getnframes() / wf.getframerate()
 
 
-def wavs_verbinden(teile, ziel, pause=0.12):
-    with wave.open(str(teile[0]), "rb") as wf:
-        params = wf.getparams()
-    stille = b"\x00" * int(params.framerate * pause) * params.sampwidth * params.nchannels
-    with wave.open(str(ziel), "wb") as out:
-        out.setparams(params)
-        for i, t in enumerate(teile):
-            with wave.open(str(t), "rb") as wf:
-                out.writeframes(wf.readframes(wf.getnframes()))
-            if i < len(teile) - 1:
-                out.writeframes(stille)
-    return pause
+# ---------------------------------------------------------------- Wort-Zeitstempel (fuer synchrone Untertitel)
+def _wnorm(w):
+    return re.sub(r"[^\w]", "", w.lower())
+
+
+def wort_zeiten(wav, woerter):
+    """Gibt fuer jedes Skript-Wort (start, ende) in Sekunden zurueck.
+    Nutzt faster-whisper zum Hoeren; faellt sonst auf eine Schaetzung nach Zeichenlaenge zurueck."""
+    gesamt = wav_dauer(wav)
+    zeiten = [None] * len(woerter)
+    try:
+        from faster_whisper import WhisperModel
+        modell = WhisperModel(os.environ.get("WHISPER_MODELL", "base"), device="cpu", compute_type="int8")
+        segmente, _ = modell.transcribe(str(wav), language="de", word_timestamps=True, vad_filter=False)
+        gehoert = [(_wnorm(w.word), w.start, w.end) for s in segmente for w in (s.words or [])]
+        sm = difflib.SequenceMatcher(None, [_wnorm(w) for w in woerter], [g[0] for g in gehoert], autojunk=False)
+        for a, b, n in sm.get_matching_blocks():
+            for k in range(n):
+                zeiten[a + k] = (gehoert[b + k][1], gehoert[b + k][2])
+        log(f"Untertitel-Sync: {sum(z is not None for z in zeiten)}/{len(woerter)} Woerter exakt gehoert")
+    except Exception as e:
+        log(f"Whisper nicht verfuegbar ({e.__class__.__name__}), schaetze Zeiten.")
+
+    # Luecken fuellen: zwischen bekannten Nachbarn nach Zeichenlaenge verteilen
+    gewicht = [len(w) + 1 for w in woerter]
+    i = 0
+    while i < len(woerter):
+        if zeiten[i] is not None:
+            i += 1
+            continue
+        j = i
+        while j < len(woerter) and zeiten[j] is None:
+            j += 1
+        t0 = zeiten[i - 1][1] if i > 0 else 0.0
+        t1 = zeiten[j][0] if j < len(woerter) else gesamt
+        summe = sum(gewicht[i:j]) or 1
+        t = t0
+        for k in range(i, j):
+            d = (t1 - t0) * gewicht[k] / summe
+            zeiten[k] = (t, t + d)
+            t += d
+        i = j
+    return zeiten
 
 
 # ---------------------------------------------------------------- Untertitel
-def chunks(text, max_woerter=3, max_zeichen=18):
-    woerter, out, akt = text.split(), [], []
-    for w in woerter:
-        if akt and (len(akt) >= max_woerter or len(" ".join(akt + [w])) > max_zeichen):
-            out.append(" ".join(akt))
+def chunk_grenzen(woerter, max_woerter=3, max_zeichen=18):
+    """Teilt eine Wortliste in Untertitel-Haeppchen, gibt Listen von Indizes zurueck."""
+    out, akt = [], []
+    for i, w in enumerate(woerter):
+        if akt and (len(akt) >= max_woerter or len(" ".join(woerter[k] for k in akt + [i])) > max_zeichen):
+            out.append(akt)
             akt = []
-        akt.append(w)
+        akt.append(i)
         if re.search(r"[.!?,:;]$", w):
-            out.append(" ".join(akt))
+            out.append(akt)
             akt = []
     if akt:
-        out.append(" ".join(akt))
+        out.append(akt)
     return out
 
 
 def ass_zeit(t):
-    h, rest = divmod(t, 3600)
+    h, rest = divmod(max(t, 0), 3600)
     m, s = divmod(rest, 60)
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
@@ -479,7 +567,8 @@ def ass_escape(t):
     return t.replace("\\", "").replace("{", "(").replace("}", ")")
 
 
-def untertitel_schreiben(szenen_zeiten, ziel):
+def untertitel_schreiben(eintraege, ziel):
+    """eintraege = [(text, start, ende, ist_hook)]"""
     kopf = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -494,20 +583,9 @@ Style: Hook,{FONT},100,&H0000E1FF,&H0000E1FF,&H00000000,&H96000000,-1,0,0,0,100,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    zeilen = []
-    for idx, (text, start, dauer) in enumerate(szenen_zeiten):
-        teile = chunks(text)
-        gewichte = [len(c) + (6 if re.search(r"[.!?]$", c) else 2 if re.search(r"[,:;]$", c) else 0)
-                    for c in teile]
-        summe = sum(gewichte) or 1
-        t = start
-        for c, g in zip(teile, gewichte):
-            d = dauer * g / summe
-            stil = "Hook" if idx == 0 else "Main"
-            pop = r"{\an5\pos(540,1180)\fscx82\fscy82\t(0,90,\fscx100\fscy100)}"
-            zeilen.append(f"Dialogue: 0,{ass_zeit(t)},{ass_zeit(t + d)},{stil},,0,0,0,,"
-                          f"{pop}{ass_escape(c.upper())}")
-            t += d
+    pop = r"{\an5\pos(540,1180)\fscx82\fscy82\t(0,90,\fscx100\fscy100)}"
+    zeilen = [f"Dialogue: 0,{ass_zeit(s)},{ass_zeit(e)},{'Hook' if hook else 'Main'},,0,0,0,,{pop}{ass_escape(t.upper())}"
+              for t, s, e, hook in eintraege]
     Path(ziel).write_text(kopf + "\n".join(zeilen) + "\n", encoding="utf-8")
 
 
@@ -549,60 +627,74 @@ def szene_rendern(clip, dauer, ziel):
 
 # ---------------------------------------------------------------- Video bauen
 def video_bauen(daten):
-    stimme = stimme_laden()
+    global STIMME_GENUTZT
     szenen = daten["szenen"]
-
-    # 1) Voiceover pro Szene
-    wavs, dauern = [], []
+    woerter, szene_von = [], []
     for i, s in enumerate(szenen):
-        p = WORK / f"voice_{i:02d}.wav"
-        dauern.append(sprich(stimme, s["text"], p))
-        wavs.append(p)
-    pause = wavs_verbinden(wavs, WORK / "voice_roh.wav")
-    gesamt = sum(dauern) + pause * (len(dauern) - 1)
-    log(f"Voiceover: {gesamt:.1f} s")
+        for w in s["text"].split():
+            woerter.append(w)
+            szene_von.append(i)
+    volltext = " ".join(s["text"] for s in szenen)
 
-    # zu lang? -> leicht beschleunigen
+    # 1) Voiceover (ein Stueck, damit die Betonung natuerlich durchlaeuft)
+    roh = WORK / "voice_roh.wav"
+    try:
+        STIMME_GENUTZT = gemini_tts(volltext, roh)
+    except Exception as e:
+        log(f"⚠️ {e} -> nehme Ersatzstimme Piper")
+        STIMME_GENUTZT = piper_tts(volltext, roh)
+    gesamt = wav_dauer(roh)
+    log(f"Voiceover ({STIMME_GENUTZT}): {gesamt:.1f} s")
+
     tempo = max(1.0, gesamt / MAX_DAUER)
     if tempo > 1.0:
         log(f"Etwas zu lang, beschleunige um Faktor {tempo:.2f}")
-        ffmpeg("-i", WORK / "voice_roh.wav", "-filter:a", f"atempo={tempo:.4f}", WORK / "voice.wav")
+        ffmpeg("-i", roh, "-filter:a", f"atempo={tempo:.4f}", WORK / "voice.wav")
     else:
-        (WORK / "voice.wav").write_bytes((WORK / "voice_roh.wav").read_bytes())
+        (WORK / "voice.wav").write_bytes(roh.read_bytes())
 
-    # Zeiten fuer Szenen/Untertitel
-    zeiten, t = [], 0.0
-    for i, d in enumerate(dauern):
-        d_eff = d / tempo
-        p_eff = (pause / tempo) if i < len(dauern) - 1 else 0.6   # am Ende kurz stehen lassen
-        zeiten.append((szenen[i]["text"], t, d_eff, d_eff + p_eff))
-        t += d_eff + p_eff
-    untertitel_schreiben([(tx, st, d) for tx, st, d, _ in zeiten], WORK / "subs.ass")
+    # 2) Wort-Zeiten -> Untertitel + Szenengrenzen
+    zeiten = [(a / tempo, b / tempo) for a, b in wort_zeiten(WORK / "voice.wav", woerter)]
+    ende_gesamt = wav_dauer(WORK / "voice.wav") + 0.6
+    eintraege = []
+    for i in range(len(szenen)):
+        idx = [k for k, s in enumerate(szene_von) if s == i]
+        for gruppe in chunk_grenzen([woerter[k] for k in idx]):
+            ks = [idx[g] for g in gruppe]
+            eintraege.append([" ".join(woerter[k] for k in ks), zeiten[ks[0]][0], zeiten[ks[-1]][1], i == 0])
+    for n in range(len(eintraege) - 1):          # Untertitel lueckenlos bis zum naechsten
+        eintraege[n][2] = max(eintraege[n][2], eintraege[n + 1][1])
+    eintraege[-1][2] = ende_gesamt
+    untertitel_schreiben(eintraege, WORK / "subs.ass")
 
-    # 2) Clips laden + schneiden
+    starts = [0.0] + [zeiten[szene_von.index(i)][0] for i in range(1, len(szenen))]
+    grenzen = starts + [ende_gesamt]
+    dauern = [max(0.8, grenzen[i + 1] - grenzen[i]) for i in range(len(szenen))]
+
+    # 3) Clips laden + schneiden
     benutzt, segmente = set(), []
-    for i, (s, (_, _, _, seg_dauer)) in enumerate(zip(szenen, zeiten)):
+    for i, (s, seg_dauer) in enumerate(zip(szenen, dauern)):
         cid, url = clip_suchen(s["suchbegriff_en"], seg_dauer, benutzt)
         benutzt.add(cid)
-        roh = WORK / f"clip_{i:02d}.mp4"
-        roh.write_bytes(requests.get(url, timeout=300).content)
+        clip = WORK / f"clip_{i:02d}.mp4"
+        clip.write_bytes(requests.get(url, timeout=300).content)
         seg = WORK / f"seg_{i:02d}.mp4"
-        szene_rendern(roh, seg_dauer, seg)
+        szene_rendern(clip, seg_dauer, seg)
         segmente.append(seg)
-        log(f"Szene {i+1}/{len(szenen)}: '{s['suchbegriff_en']}' ok")
+        log(f"Szene {i+1}/{len(szenen)}: '{s['suchbegriff_en']}' ({seg_dauer:.1f} s) ok")
 
     liste = WORK / "liste.txt"
     liste.write_text("".join(f"file '{p.resolve()}'\n" for p in segmente))
     ffmpeg("-f", "concat", "-safe", "0", "-i", liste, "-c", "copy", WORK / "bild.mp4")
 
-    # 3) Alles zusammen + Untertitel einbrennen
+    # 4) Alles zusammen + Untertitel einbrennen (hochkant 1080x1920, 9:16)
     final = OUT / "faktenfieber.mp4"
     subs = str((WORK / "subs.ass").resolve()).replace(":", r"\:")
     ffmpeg("-i", WORK / "bild.mp4", "-i", WORK / "voice.wav",
-           "-vf", f"ass='{subs}'", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+           "-vf", f"ass='{subs}',setsar=1,setdar=9/16", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest",
            "-movflags", "+faststart", final)
-    return final, t
+    return final, ende_gesamt
 
 
 # ---------------------------------------------------------------- Telegram
@@ -614,7 +706,8 @@ def telegram_senden(video, daten, check, dauer):
     caption = f"🎬 {daten['titel']}\n⏱ {dauer:.0f} s | {daten['thema']}"
     with open(video, "rb") as f:
         r = requests.post(f"{api}/sendVideo",
-                          data={"chat_id": TG_CHAT, "caption": caption[:1000], "supports_streaming": "true"},
+                          data={"chat_id": TG_CHAT, "caption": caption[:1000], "supports_streaming": "true",
+                                "width": W, "height": H, "duration": int(dauer)},
                           files={"video": ("faktenfieber.mp4", f, "video/mp4")}, timeout=300)
     if r.status_code != 200:
         log(f"Telegram-Video-Fehler: {r.text[:300]}")
@@ -625,7 +718,7 @@ def telegram_senden(video, daten, check, dauer):
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
             f"Quelle: {daten['quellen'][0]}\n\n{' '.join(daten.get('hashtags', []))}\n\n"
             f"🔎 FAKTENCHECK (Prüfer: {check.get('pruefer', '?')})\n{pruef}\n\n"
-            f"🤖 Geschrieben von: {daten.get('_modell')}")
+            f"🤖 Geschrieben von: {daten.get('_modell')}\n🎙 Stimme: {STIMME_GENUTZT}")
     requests.post(f"{api}/sendMessage", data={"chat_id": TG_CHAT, "text": text[:4000],
                                               "disable_web_page_preview": "true"}, timeout=60)
 
