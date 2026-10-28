@@ -8,6 +8,15 @@ on:
     - cron: "*/30 15-19 * * *"      # Nachmittag/Abend (18-Uhr-Video)
     - cron: "57 5,6,15,16 * * *"    # kurz vor 8:00 / 18:00 (Sommer- und Winterzeit)
   workflow_dispatch:
+    inputs:
+      aktion:
+        description: "vom Telegram-Tuersteher: ok oder neu"
+        required: false
+        default: ""
+      slot:
+        description: "Termin, z. B. 2026-10-29 08:00"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -35,6 +44,8 @@ jobs:
 
       - name: Freigaben pruefen + posten
         env:
+          AKTION: ${{ github.event.inputs.aktion }}
+          AKTION_SLOT: ${{ github.event.inputs.slot }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_PAT: ${{ secrets.GH_PAT }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
