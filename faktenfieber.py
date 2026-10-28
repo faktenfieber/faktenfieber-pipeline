@@ -837,6 +837,60 @@ def telegram_senden(video, daten, check, dauer):
                                               "disable_web_page_preview": "true"}, timeout=60)
 
 
+# ---------------------------------------------------------------- YouTube-Upload
+YT_CLIENT_ID = os.environ.get("YT_CLIENT_ID", "")
+YT_CLIENT_SECRET = os.environ.get("YT_CLIENT_SECRET", "")
+YT_REFRESH_TOKEN = os.environ.get("YT_REFRESH_TOKEN", "")
+
+
+def youtube_beschreibung(daten):
+    teile = [daten.get("beschreibung", ""), "", f"📚 Quelle: {daten['quellen'][0]}"]
+    if daten.get("bildnachweise"):
+        teile += ["", "📸 Bildnachweise:"] + [f"• {b}" for b in daten["bildnachweise"]]
+    teile += ["", " ".join(daten.get("hashtags", [])) + " #shorts"]
+    return "\n".join(teile).replace("<", "").replace(">", "")[:4900]
+
+
+def youtube_hochladen(video, daten, sichtbarkeit="private"):
+    if not (YT_CLIENT_ID and YT_CLIENT_SECRET and YT_REFRESH_TOKEN):
+        raise RuntimeError("YouTube-Secrets fehlen (YT_CLIENT_ID, YT_CLIENT_SECRET, YT_REFRESH_TOKEN)")
+    r = requests.post("https://oauth2.googleapis.com/token", timeout=30, data={
+        "client_id": YT_CLIENT_ID, "client_secret": YT_CLIENT_SECRET,
+        "refresh_token": YT_REFRESH_TOKEN, "grant_type": "refresh_token"})
+    if r.status_code != 200:
+        raise RuntimeError(f"YouTube-Login fehlgeschlagen: {r.text[:300]}")
+    token = r.json()["access_token"]
+
+    tags = [h.lstrip("#") for h in daten.get("hashtags", []) if h.strip("#")][:15]
+    meta = {
+        "snippet": {
+            "title": daten["titel"].replace("<", "").replace(">", "")[:100],
+            "description": youtube_beschreibung(daten),
+            "tags": tags,
+            "categoryId": "27",                  # Bildung
+            "defaultLanguage": "de",
+            "defaultAudioLanguage": "de",
+        },
+        "status": {"privacyStatus": sichtbarkeit, "selfDeclaredMadeForKids": False},
+    }
+    groesse = Path(video).stat().st_size
+    r = requests.post("https://www.googleapis.com/upload/youtube/v3/videos",
+                      params={"uploadType": "resumable", "part": "snippet,status"},
+                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=UTF-8",
+                               "X-Upload-Content-Type": "video/mp4", "X-Upload-Content-Length": str(groesse)},
+                      data=json.dumps(meta), timeout=60)
+    if r.status_code != 200 or "Location" not in r.headers:
+        raise RuntimeError(f"YouTube-Upload-Start fehlgeschlagen: {r.status_code} {r.text[:400]}")
+    with open(video, "rb") as f:
+        r2 = requests.put(r.headers["Location"], data=f, timeout=600,
+                          headers={"Authorization": f"Bearer {token}", "Content-Type": "video/mp4"})
+    if r2.status_code not in (200, 201):
+        raise RuntimeError(f"YouTube-Upload fehlgeschlagen: {r2.status_code} {r2.text[:400]}")
+    vid = r2.json()["id"]
+    log(f"YouTube-Upload ok: https://youtube.com/shorts/{vid} ({sichtbarkeit})")
+    return vid
+
+
 # ---------------------------------------------------------------- Main
 def main():
     for d in (OUT, WORK):
@@ -881,6 +935,14 @@ def main():
     (OUT / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     speichere_thema(daten["thema"])
     telegram_senden(video, daten, check, dauer)
+    if os.environ.get("YT_UPLOAD") == "1":
+        try:
+            vid = youtube_hochladen(video, daten)
+            telegram_text(f"▶️ Auf YouTube hochgeladen (privat):\nhttps://youtube.com/shorts/{vid}\n\n"
+                          "Solange das API-Audit läuft, bitte in der YouTube-Studio-App auf „Öffentlich“ stellen.")
+        except Exception as e:
+            log(f"YouTube-Fehler: {e}")
+            telegram_text(f"❌ YouTube-Upload fehlgeschlagen:\n{e}")
     log(f"FERTIG: {video} ({dauer:.1f} s)")
 
 
