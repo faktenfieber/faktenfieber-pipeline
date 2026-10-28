@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v2.1
+FAKTENFIEBER – Pipeline v2.2
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1449,21 +1449,70 @@ def instagram_caption(daten):
     return "\n".join(teile)[:2150]
 
 
+GH_PAT = os.environ.get("GH_PAT", "")
+GH_OWNER = os.environ.get("GITHUB_REPOSITORY_OWNER", "faktenfieber")
+
+
+def _github_pages(video):
+    """Legt das Video auf deiner eigenen Website (faktenfieber.github.io) ab, mit sauberem video/mp4.
+    Es liegt dort immer nur das jeweils aktuelle Video (die Historie wird jedes Mal ersetzt)."""
+    if not GH_PAT:
+        log("   GitHub-Pages-Hosting uebersprungen (Secret GH_PAT fehlt)")
+        return None
+    import shutil
+    import tempfile
+    import uuid
+    repo = f"https://x-access-token:{GH_PAT}@github.com/{GH_OWNER}/{GH_OWNER}.github.io.git"
+    ordner = Path(tempfile.mkdtemp())
+    git = lambda *a: subprocess.run(["git", *a], cwd=ordner, check=True, capture_output=True, text=True)
+    try:
+        subprocess.run(["git", "clone", "--depth", "1", "--branch", "main", repo, str(ordner)], check=True, capture_output=True, text=True)
+        shutil.rmtree(ordner / "v", ignore_errors=True)
+        (ordner / "v").mkdir()
+        name = f"{uuid.uuid4().hex[:12]}.mp4"
+        shutil.copy(video, ordner / "v" / name)
+        git("config", "user.name", "faktenfieber-bot")
+        git("config", "user.email", "actions@users.noreply.github.com")
+        git("checkout", "--orphan", "neu")
+        git("add", "-A")
+        git("commit", "-m", "Website + aktuelles Video")
+        git("push", "-f", "origin", "neu:main")
+    except subprocess.CalledProcessError as e:
+        log(f"   GitHub-Pages-Upload fehlgeschlagen: {(e.stderr or '')[-300:].replace(GH_PAT, '***')}")
+        return None
+    url = f"https://{GH_OWNER}.github.io/v/{name}"
+    for _ in range(24):                          # warten bis die Seite neu gebaut ist (max. ~4 Min.)
+        time.sleep(10)
+        try:
+            r = requests.head(url, timeout=20)
+            if r.status_code == 200 and "video" in r.headers.get("Content-Type", ""):
+                return url
+        except requests.RequestException:
+            pass
+    log("   GitHub Pages hat das Video nicht rechtzeitig bereitgestellt")
+    return None
+
+
+def _temp_uguu(video):
+    with open(video, "rb") as f:
+        r = requests.post("https://uguu.se/upload", timeout=300, files={"files[]": ("faktenfieber.mp4", f, "video/mp4")})
+    try:
+        return r.json()["files"][0]["url"]
+    except Exception:
+        log(f"   uguu: {r.status_code} {r.text[:150]}")
+        return None
+
+
 def _temp_litterbox(video):
     with open(video, "rb") as f:
         r = requests.post("https://litterbox.catbox.moe/resources/internals/api.php", timeout=300,
                           data={"reqtype": "fileupload", "time": "12h"},
                           files={"fileToUpload": ("faktenfieber.mp4", f, "video/mp4")})
     url = r.text.strip()
-    return url if r.status_code == 200 and url.startswith("https://") else None
-
-
-def _temp_tmpfiles(video):
-    with open(video, "rb") as f:
-        r = requests.post("https://tmpfiles.org/api/v1/upload", timeout=300,
-                          files={"file": ("faktenfieber.mp4", f, "video/mp4")})
-    url = (r.json().get("data") or {}).get("url", "") if r.status_code == 200 else ""
-    return url.replace("tmpfiles.org/", "tmpfiles.org/dl/", 1).replace("http://", "https://") or None
+    if r.status_code == 200 and url.startswith("https://"):
+        return url
+    log(f"   litterbox: {r.status_code} {r.text[:150]}")
+    return None
 
 
 def instagram_hochladen(video, daten):
@@ -1472,7 +1521,8 @@ def instagram_hochladen(video, daten):
     if not (IG_TOKEN and IG_USER):
         raise RuntimeError("Instagram-Secrets fehlen (IG_ACCESS_TOKEN, IG_USER_ID)")
     fehler = []
-    for name, hoster in (("litterbox", _temp_litterbox), ("tmpfiles", _temp_tmpfiles)):
+    for name, hoster in (("GitHub Pages", _github_pages), ("uguu", _temp_uguu),
+                         ("litterbox", _temp_litterbox), ("tmpfiles", _temp_tmpfiles)):
         try:
             video_url = hoster(video)
         except Exception as e:
