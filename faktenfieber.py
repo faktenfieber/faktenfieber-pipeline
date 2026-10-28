@@ -139,7 +139,7 @@ def gemini(prompt, suche=False, temperatur=0.9):
                 log(f"Gemini-Problem -> {fehler}")
                 if r.status_code == 429:
                     # Tageslimit oder gar kein Gratis-Kontingent -> sofort naechstes Modell
-                    if "PerDay" in info or "limit: 0" in r.text or ("FreeTier" in info and versuch):
+                    if mit_suche or "PerDay" in info or "limit: 0" in r.text or ("FreeTier" in info and versuch):
                         GESPERRT.add((modell, mit_suche))
                         break
                     time.sleep(20)
