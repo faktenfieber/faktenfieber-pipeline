@@ -2,12 +2,12 @@
  "tg_offset": 0,
  "slots": {
   "2026-10-28 18:00": {
-   "status": "verworfen",
-   "run_id": "40715815843",
-   "message_id": 51,
-   "titel": "Todesstrafe für Maschinenbruch? Die Ludditen",
+   "status": "wartet",
+   "run_id": "40725354601",
+   "message_id": 54,
+   "titel": "Die mysteriösen Doppel­morde von Göhrde 1989",
    "neu_gemacht": 1,
-   "erstellt": "2026-10-28T16:31:00.662066+01:00"
+   "erstellt": "2026-10-28T17:27:25.010612+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00"
