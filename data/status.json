@@ -14,12 +14,12 @@
    }
   },
   "2026-10-28 18:23": {
-   "status": "wartet",
+   "status": "verworfen",
    "run_id": "40735176085",
    "message_id": 65,
    "titel": "Das vergessene Telefon‑Radio aus dem 19. Jahrhundert",
    "extra": true,
-   "neu_gemacht": 0,
+   "neu_gemacht": 1,
    "erstellt": "2026-10-28T18:26:53.764073+01:00"
   }
  },
