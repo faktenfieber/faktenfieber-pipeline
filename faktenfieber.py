@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v1.9
+FAKTENFIEBER – Pipeline v1.9.1
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1189,7 +1189,9 @@ def video_bauen(daten):
         (WORK / "voice.wav").write_bytes(roh.read_bytes())
 
     # 2) Wort-Zeiten -> Untertitel + Szenengrenzen
-    zeiten = [(a / tempo, b / tempo) for a, b in wort_zeiten(WORK / "voice.wav", woerter)]
+    # Achtung: voice.wav ist schon die (evtl. beschleunigte) End-Fassung -> Zeiten 1:1 uebernehmen
+    versatz = float(os.environ.get("UNTERTITEL_VERSATZ", "0.05"))
+    zeiten = [(a + versatz, b + versatz) for a, b in wort_zeiten(WORK / "voice.wav", woerter)]
     ende_gesamt = wav_dauer(WORK / "voice.wav") + 0.15     # fast keine Pause am Ende -> sauberer Loop
     eintraege = []
     for i in range(len(szenen)):
