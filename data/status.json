@@ -36,6 +36,15 @@
     "youtube_fehler": "YouTube-Upload-Start fehlgeschlagen: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"The user has exceeded the number of videos they may upload.\",\n    \"errors\": [\n      {\n        \"message\": \"The user has exceeded the number of videos they may upload.\",\n        \"domain\": \"youtube.video\",\n        ",
     "instagram": "https://www.instagram.com/reel/DfDCYPhD1l8/"
    }
+  },
+  "2026-10-28 19:09": {
+   "status": "wartet",
+   "run_id": "40742246957",
+   "message_id": 81,
+   "titel": "Die Inquisition: Dein Job war kein Schutz",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-28T19:14:32.904006+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00"
