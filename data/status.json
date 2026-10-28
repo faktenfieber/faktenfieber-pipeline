@@ -12,6 +12,15 @@
     "youtube_fehler": "YouTube-Upload-Start fehlgeschlagen: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"The user has exceeded the number of videos they may upload.\",\n    \"errors\": [\n      {\n        \"message\": \"The user has exceeded the number of videos they may upload.\",\n        \"domain\": \"youtube.video\",\n        ",
     "instagram": "https://www.instagram.com/reel/DfC8LiyDpbt/"
    }
+  },
+  "2026-10-28 18:23": {
+   "status": "wartet",
+   "run_id": "40735176085",
+   "message_id": 65,
+   "titel": "Das vergessene Telefon‑Radio aus dem 19. Jahrhundert",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-28T18:26:53.764073+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00"
