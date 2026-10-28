@@ -81,40 +81,76 @@ def gemini_modelle():
 
 
 MODELLE = []
+GESPERRT = set()          # (modell, suche) Kombis ohne Gratis-Kontingent
+OHNE_SUCHE = False        # wird True, wenn die Live-Suche nicht verfuegbar war
+
+
+def quota_info(r):
+    """Liest aus einer 429-Antwort, welches Limit gerissen ist."""
+    try:
+        details = r.json().get("error", {}).get("details", [])
+    except ValueError:
+        return ""
+    teile = []
+    for d in details:
+        for v in d.get("violations", []):
+            teile.append(f"{v.get('quotaId', '')} {v.get('quotaValue', '')}".strip())
+    return "; ".join(teile)
+
+
+def _anfrage(modell, body):
+    r = requests.post(f"{GEMINI_BASE}/models/{modell}:generateContent",
+                      params={"key": GEMINI_KEY}, json=body, timeout=180)
+    if r.status_code != 200:
+        return r, None
+    kand = (r.json().get("candidates") or [{}])[0]
+    text = "".join(p.get("text", "") for p in kand.get("content", {}).get("parts", []))
+    quellen = [ch["web"]["title"] for ch in kand.get("groundingMetadata", {}).get("groundingChunks", [])
+               if (ch.get("web") or {}).get("title")]
+    return r, (text, quellen) if text.strip() else None
 
 
 def gemini(prompt, suche=False, temperatur=0.9):
-    global MODELLE
+    global MODELLE, OHNE_SUCHE
     if not MODELLE:
         MODELLE = gemini_modelle()
-    body = {
-        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": temperatur},
-    }
-    if suche:
-        body["tools"] = [{"google_search": {}}]
+    modi = [True, False] if suche else [False]
     fehler = ""
-    for modell in MODELLE[:5]:
-        for versuch in range(3):
-            r = requests.post(f"{GEMINI_BASE}/models/{modell}:generateContent",
-                              params={"key": GEMINI_KEY}, json=body, timeout=180)
-            if r.status_code == 200:
-                daten = r.json()
-                kand = (daten.get("candidates") or [{}])[0]
-                text = "".join(p.get("text", "") for p in kand.get("content", {}).get("parts", []))
-                quellen = []
-                for ch in kand.get("groundingMetadata", {}).get("groundingChunks", []):
-                    web = ch.get("web") or {}
-                    if web.get("title"):
-                        quellen.append(web["title"])
-                if text.strip():
-                    return text, quellen, modell
-            fehler = f"{modell}: HTTP {r.status_code} {r.text[:300]}"
-            log(f"Gemini-Problem -> {fehler}")
-            if r.status_code in (429, 500, 503):
-                time.sleep(15 * (versuch + 1))
+    for mit_suche in modi:
+        if mit_suche is False and suche:
+            OHNE_SUCHE = True
+            log("⚠️ Live-Suche nicht verfuegbar, arbeite ohne Google-Suche weiter.")
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": temperatur},
+        }
+        if mit_suche:
+            body["tools"] = [{"google_search": {}}]
+        for modell in MODELLE[:8]:
+            if (modell, mit_suche) in GESPERRT:
                 continue
-            break
+            for versuch in range(2):
+                r, ergebnis = _anfrage(modell, body)
+                if ergebnis:
+                    log(f"Gemini ok: {modell} ({'mit' if mit_suche else 'ohne'} Suche)")
+                    return ergebnis[0], ergebnis[1], modell
+                info = quota_info(r)
+                fehler = f"{modell}: HTTP {r.status_code} {info or r.text[:200]}"
+                log(f"Gemini-Problem -> {fehler}")
+                if r.status_code == 429:
+                    # Tageslimit oder gar kein Gratis-Kontingent -> sofort naechstes Modell
+                    if "PerDay" in info or "limit: 0" in r.text or ("FreeTier" in info and versuch):
+                        GESPERRT.add((modell, mit_suche))
+                        break
+                    time.sleep(20)
+                    continue
+                if r.status_code in (500, 503):
+                    time.sleep(10)
+                    continue
+                GESPERRT.add((modell, mit_suche))
+                break
+            else:
+                GESPERRT.add((modell, mit_suche))
     raise RuntimeError(f"Gemini nicht erreichbar: {fehler}")
 
 
@@ -411,6 +447,8 @@ def telegram_senden(video, daten, check, dauer):
         return
     api = f"https://api.telegram.org/bot{TG_TOKEN}"
     caption = f"🎬 {daten['titel']}\n⏱ {dauer:.0f} s | {daten.get('kategorie', '')}"
+    if OHNE_SUCHE:
+        caption += "\n⚠️ Ohne Live-Google-Suche erstellt: Fakten bitte besonders genau checken!"
     with open(video, "rb") as f:
         r = requests.post(f"{api}/sendVideo",
                           data={"chat_id": TG_CHAT, "caption": caption[:1000], "supports_streaming": "true"},
