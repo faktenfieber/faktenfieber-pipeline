@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v3.0
+FAKTENFIEBER – Pipeline v3.1
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -961,18 +961,12 @@ def bild_rendern(bild, dauer, ziel, nummer):
 MUSIK_CACHE = ROOT / "data" / "musik"            # erfolgreich geladene Tracks werden hier gesammelt
 MUSIK_CACHE_MAX = 25
 USED_MUSIK = ROOT / "data" / "used_music.json"
-MUSIK_LAUTSTAERKE = float(os.environ.get("MUSIK_LAUTSTAERKE", "0.20"))
-STIMMUNG_SUCHE = {
-    "spannend": ["suspense cinematic", "tension underscore", "documentary suspense"],
-    "mysterioes": ["mystery ambient", "mysterious documentary", "dark ambient"],
-    "dramatisch": ["dramatic cinematic", "emotional orchestral", "drama underscore"],
-    "froehlich": ["upbeat happy", "cheerful acoustic", "fun background"],
-    "episch": ["epic orchestral", "cinematic adventure", "inspiring epic"],
-    "historisch": ["medieval instrumental", "baroque instrumental", "classical piano", "historical cinematic"],
-    "kurios": ["quirky", "playful pizzicato", "funny background"],
-    "ruhig": ["calm ambient", "relaxing piano", "chill lofi"],
-}
-ENTSPANNT = ["calm ambient", "relaxing piano", "chill lofi", "soft acoustic", "ambient background"]
+MUSIK_LAUTSTAERKE = float(os.environ.get("MUSIK_LAUTSTAERKE", "0.11"))   # bewusst leise
+MYTHISCH = ["mystical ambient", "ethereal ambient", "atmospheric ambient", "fantasy ambient",
+            "dark ambient calm", "cinematic ambient", "meditation ambient", "dreamy ambient"]
+STIMMUNG_SUCHE = {k: MYTHISCH for k in ("spannend", "mysterioes", "dramatisch", "froehlich", "episch",
+                                         "historisch", "kurios", "ruhig", "mythisch")}
+ENTSPANNT = ["calm ambient", "soft piano ambient", "relaxing ambient", "ambient background", "peaceful ambient"]
 MUSIKNACHWEIS = ""
 
 
@@ -1018,17 +1012,9 @@ def _nachweis(t):
     return f"„{t['title']}“ von {t['creator']} – {lizenz} – {t['landing']}".strip(" –")
 
 
-ARCHIV_THEMEN = {
-    "spannend": ["cinematic", "soundtrack", "suspense", "dark ambient"],
-    "mysterioes": ["dark ambient", "ambient", "drone", "mystery"],
-    "dramatisch": ["cinematic", "orchestral", "soundtrack", "dramatic"],
-    "froehlich": ["acoustic", "happy", "folk", "ukulele"],
-    "episch": ["orchestral", "epic", "cinematic", "soundtrack"],
-    "historisch": ["classical", "baroque", "medieval", "harpsichord", "orchestral"],
-    "kurios": ["quirky", "jazz", "acoustic", "chiptune"],
-    "ruhig": ["ambient", "piano", "chill", "lofi"],
-}
-ARCHIV_ENTSPANNT = ["ambient", "piano", "chill", "lofi", "relaxing"]
+ARCHIV_MYTHISCH = ["ambient", "dark ambient", "atmospheric", "ethereal", "drone", "meditation", "fantasy"]
+ARCHIV_THEMEN = {k: ARCHIV_MYTHISCH for k in STIMMUNG_SUCHE}
+ARCHIV_ENTSPANNT = ["ambient", "relaxing", "meditation", "calm", "piano"]
 ARCHIV_LIZENZ = ('(licenseurl:*publicdomain/zero* OR licenseurl:*publicdomain/mark* OR '
                  'licenseurl:*licenses/by/* OR licenseurl:*licenses/by-sa/*)')
 
@@ -1037,7 +1023,11 @@ ARCHIV_LIZENZ = ('(licenseurl:*publicdomain/zero* OR licenseurl:*publicdomain/ma
 VERBOTEN = ["speech", "spoken", "vocal", "vocals", "voice", "singer", "song", "lyrics", "rap", "hip hop", "hiphop",
             "lecture", "audiobook", "podcast", "radio", "interview", "poetry", "poem", "propaganda", "rede",
             "hörspiel", "hoerspiel", "sermon", "preaching", "news", "broadcast", "ww2", "wwii", "war speech",
-            "hitler", "nazi", "politic", "choir", "chant", "a cappella", "acapella", "opera", "karaoke"]
+            "hitler", "nazi", "politic", "choir", "chant", "a cappella", "acapella", "opera", "karaoke",
+            # zu wild fuer leise Hintergrundmusik:
+            "drum", "drums", "beat", "beats", "techno", "dubstep", "rock", "metal", "punk", "edm", "dance",
+            "trap", "breakbeat", "hardcore", "house", "trance", "dnb", "jungle", "industrial", "noise",
+            "glitch", "electro", "funk", "party", "club", "aggressive", "hard", "rave"]
 VERBOTEN_SUCHE = " OR ".join(f'"{v}"' for v in VERBOTEN)
 INSTRUMENTAL_BONUS = ["instrumental", "ambient", "piano", "orchestral", "cinematic", "soundtrack", "lofi", "chill"]
 
@@ -1193,7 +1183,7 @@ def musik_waehlen(daten):
     """Die KI waehlt aus frei lizenzierten Tracks den passendsten. Sonst entspannte Musik,
     sonst ein Track aus dem selbst gesammelten Archiv, und als allerletztes ein selbst erzeugter Ambient-Teppich."""
     global MUSIKNACHWEIS
-    stimmung = str(daten.get("musik_stimmung", "spannend")).lower()
+    stimmung = "mythisch"                         # immer ruhige, mystische Hintergrundmusik
     if stimmung not in ARCHIV_THEMEN:
         stimmung = "spannend"
     zuletzt = set((_lade_json(USED_MUSIK) or [])[-12:])
@@ -1218,8 +1208,9 @@ def musik_waehlen(daten):
         try:
             auswahl = "\n".join(f"{i}: {t['title'][:70]} | {t['tags'][:60]}" for i, t in enumerate(liste))
             prompt = f"""Du bist Musik-Supervisor fuer einen YouTube-Short ueber: "{daten.get('titel')}" ({daten.get('thema')}).
-Gewuenschte Stimmung: {label}. Die Musik laeuft LEISE unter einer Erzaehlstimme.
-Waehle die 4 passendsten Tracks/Alben (Atmosphaere, Epoche, Tempo). NUR reine Instrumentalmusik!
+Gewuenschte Stimmung: ruhig, mystisch, atmosphaerisch, schwebend, eher langsam. Die Musik laeuft
+SEHR LEISE unter einer Erzaehlstimme und darf nie ablenken. Keine Beats, kein Schlagzeug, nichts Hektisches.
+Waehle die 4 passendsten Tracks/Alben. NUR reine Instrumentalmusik!
 Absolut verboten: Gesang, Sprache, Reden, Rap, Hoerspiele, Nachrichten, historische Tonaufnahmen,
 Podcasts, Lesungen, Weihnachtslieder, Noise und Field-Recordings.
 
@@ -1248,8 +1239,8 @@ Antworte NUR mit JSON: {{"auswahl": [Nummer1, Nummer2, Nummer3, Nummer4], "warum
     if MUSIK_CACHE.exists():
         (MUSIK_CACHE / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=1), encoding="utf-8")
     archiv = [(n, i) for n, i in index.items() if (MUSIK_CACHE / n).exists()]
-    if archiv:
-        ruhig = [a for a in archiv if a[1].get("stimmung") == "ruhig"] or archiv
+    ruhig = [a for a in archiv if a[1].get("stimmung") in ("ruhig", "mythisch")]
+    if ruhig:
         name, info = random.choice(ruhig)
         MUSIKNACHWEIS = info.get("nachweis", "")
         log(f"🎵 Musik aus dem eigenen Archiv: {name}")
@@ -1287,6 +1278,7 @@ def audio_mischen(stimme, musik, gesamt, ziel):
         pass
     filt = (f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={gesamt:.2f},asplit=2[stimme][sc];"
             f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:{gesamt:.2f},asetpts=PTS-STARTPTS,"
+            f"acompressor=threshold=0.1:ratio=3:attack=50:release=600,lowpass=f=6500,"   # Spitzen glaetten, weicher
             f"volume={MUSIK_LAUTSTAERKE},afade=t=in:d=0.2,afade=t=out:st={max(0, gesamt - 0.4):.2f}:d=0.4[m];"
             f"[m][sc]sidechaincompress=threshold=0.04:ratio=5:attack=20:release=400[musik];"
             f"[stimme][musik]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=11,"
