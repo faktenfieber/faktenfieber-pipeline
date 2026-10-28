@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v2.3
+FAKTENFIEBER – Pipeline v2.3.1
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1543,6 +1543,14 @@ def _temp_litterbox(video):
         return url
     log(f"   litterbox: {r.status_code} {r.text[:150]}")
     return None
+
+
+def _temp_tmpfiles(video):
+    with open(video, "rb") as f:
+        r = requests.post("https://tmpfiles.org/api/v1/upload", timeout=300,
+                          files={"file": ("faktenfieber.mp4", f, "video/mp4")})
+    url = (r.json().get("data") or {}).get("url", "") if r.status_code == 200 else ""
+    return url.replace("tmpfiles.org/", "tmpfiles.org/dl/", 1).replace("http://", "https://") or None
 
 
 def instagram_hochladen(video, daten):
