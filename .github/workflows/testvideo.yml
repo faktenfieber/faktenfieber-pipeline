@@ -23,7 +23,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
-          pip install -q requests piper-tts
+          pip install -q requests piper-tts faster-whisper
 
       - name: Video bauen
         env:
