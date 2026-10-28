@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v4.1
+FAKTENFIEBER – Pipeline v4.3
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -242,14 +242,20 @@ def wiki(**params):
 
 # Schwerpunkt: Geschichte, wie Menschen frueher lebten, kuriose Ereignisse, unnuetzes Wissen
 THEMEN_SUCHE = [
-    "Mittelalter Alltag", "Antike Rom", "Altes Ägypten", "Wikinger", "Ritter", "Steinzeit", "Pest",
-    "Brauch", "Aberglaube", "Hinrichtung", "Gefängnis Geschichte", "Erfindung", "Patent", "Kuriosität",
-    "Hochstapler", "Fälschung", "Schwindel", "Unglück", "Katastrophe", "Explosion", "Schiffbruch",
-    "Expedition", "Entdeckung", "Medizin Geschichte", "Hygiene", "Mode Geschichte", "Essen Geschichte",
-    "Bier Geschichte", "Geld Geschichte", "Post Geschichte", "Eisenbahn Geschichte", "Krieg Kuriosität",
-    "Spionage", "Schmuggel", "Piraterie", "Raub", "Kriminalfall", "Gesetz", "Kaiser", "König", "Papst",
-    "Industrialisierung", "19. Jahrhundert", "Barock", "Renaissance", "Zirkus", "Jahrmarkt", "Spiel Geschichte",
-    "Tier Rekord", "Naturphänomen", "Rekord", "Weltausstellung", "Kunstraub", "Ballon", "Zeppelin",
+    # Geschichte zum Anfassen
+    "Mittelalter Alltag", "Ritter", "Burg", "Gladiator", "Antike Rom", "Altes Ägypten", "Mumie", "Pharao",
+    "Wikinger", "Piraterie", "Steinzeit", "Pest", "Hinrichtung", "Folter Mittelalter", "Gefängnis Geschichte",
+    "Aberglaube", "Hexenverfolgung", "Brauch", "Beruf Geschichte", "Arbeit Mittelalter", "Kinder Geschichte",
+    "Medizin Geschichte", "Hygiene", "Essen Geschichte", "Süßigkeit", "Mode Geschichte",
+    # Krimi, Abenteuer, Katastrophen
+    "Hochstapler", "Fälschung", "Schwindel", "Raub", "Kunstraub", "Kriminalfall", "Schmuggel", "Spionage",
+    "Schiffbruch", "Unglück", "Katastrophe", "Explosion", "Vulkanausbruch", "Erdbeben", "Expedition",
+    "Verschollen", "Schatz", "Entdeckung",
+    # Verrueckte Erfindungen & Rekorde
+    "Erfindung", "Erfindung Zufall", "Rekord", "Zirkus", "Jahrmarkt", "Ballon", "Zeppelin", "Achterbahn",
+    "Olympische Spiele", "Sport Kuriosität",
+    # Natur & Tiere
+    "Tier Rekord", "giftiges Tier", "Hai", "Dinosaurier", "Naturphänomen", "Höhle", "Meteorit",
 ]
 KATEGORIE_SUCHE = "incategory:Wikipedia:Exzellent|Wikipedia:Lesenswert"
 
@@ -446,20 +452,31 @@ Strafen, Medizin, Essen, Aberglaube), kuriose historische Ereignisse, verrueckte
 "unnuetzes Wissen", das man sofort weitererzaehlen will. Daneben auch erstaunliche Fakten aus Natur und Wissenschaft.
 Bevorzuge ECHTE Ereignisse, Phaenomene, Orte, Erfindungen, Kriminalfaelle, Katastrophen, Kuriositaeten.
 Meiden: Romane, Filme, Alben, Fiktion, Verwaltung, Listen, Kirchen/Gebaeude ohne Story, Biografien ohne Twist.
-"spannung" ehrlich bewerten: 9-10 nur, wenn ein konkreter Fakt wirklich verblueffend ist.
-"verstaendlich" bewerten: Versteht ein 14-Jaehriger ohne Vorwissen das Thema in 40 Sekunden? (1-10)
-Waehle nur Themen mit verstaendlich >= 7. Meide Themen, die viel Fachwissen brauchen
-(komplizierte Chemie, Mathematik, Politik-Details, Rechtsfragen, Theologie, Sprachwissenschaft).
+ZIELGRUPPE: breites Publikum ab ca. 15, vor allem junge Erwachsene, die durch Shorts scrollen.
+Nicht kindisch, aber man darf KEIN Vorwissen und KEIN Studium brauchen. Frag dich: Wuerde ein ganz normaler
+Mensch (ob 16 oder 40) stoppen und das danach Freunden erzaehlen? Gut sind Themen mit Gaensehaut-, Ekel-,
+"Was?!"- oder Lach-Faktor:
+Gruseliges, Krasses, Ekliges, Gefaehrliches, Rekorde, Verbrechen, Abenteuer, verrueckte Zufaelle,
+und wie hart/seltsam das Leben frueher war (z. B. fuer Kinder, in der Schule, beim Arzt, beim Essen).
+Bewerte ehrlich (1-10):
+"spannung": 9-10 nur, wenn ein konkreter Fakt wirklich verblueffend ist.
+"verstaendlich": Versteht jeder ohne Vorwissen das Thema sofort, ohne viel Erklaerung?
+"massentauglich": Wie sehr interessiert das ein breites Publikum (Jugendliche UND Erwachsene)?
+Waehle nur ein Thema mit verstaendlich >= 8 UND massentauglich >= 7. Im Zweifel das EINFACHERE Thema nehmen.
+Meide komplett: Politik, Parteien, Religion/Theologie, Recht, Wirtschaft, Philosophie, Kunstgeschichte,
+Architektur, Sprachwissenschaft, Adelsfamilien und Stammbaeume, Verwaltung, abstrakte Wissenschaft
+(komplizierte Chemie, Physik, Mathematik), und alles mit vielen Namen und Jahreszahlen.
 
 {liste}
 
-Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "spannung": 1-10, "verstaendlich": 1-10}}"""
+Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "spannung": 1-10, "verstaendlich": 1-10, "massentauglich": 1-10}}"""
     wahl, _ = ki(prompt, temperatur=0.4)
     titel = wahl.get("titel", "")
     if titel not in kandidaten:
         titel = difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten)[:1]
         titel = titel[0]
-    log(f"Gewaehlt: {titel} (Spannung {wahl.get('spannung')}/10, verstaendlich {wahl.get('verstaendlich')}/10) – {wahl.get('warum', '')}")
+    log(f"Gewaehlt: {titel} (Spannung {wahl.get('spannung')}, verstaendlich {wahl.get('verstaendlich')}, "
+        f"massentauglich {wahl.get('massentauglich')}) – {wahl.get('warum', '')}")
     return titel
 
 
@@ -485,7 +502,16 @@ STIL:
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
   Roter Faden, jeder Satz baut auf dem vorherigen auf, nichts Unverstaendliches.
-- KOMPLIZIERTES EINFACH MACHEN: Erklaere so, dass es ein 14-Jaehriger sofort versteht.
+- SO ERKLAEREN, ALS WUERDEST DU ES EINEM KUMPEL BEIM BIER ODER IN DER PAUSE ERZAEHLEN:
+  Fuer Jugendliche UND Erwachsene: nicht kindisch, nicht belehrend, aber ohne Vorwissen sofort verstaendlich.
+  * Einfache Alltagssprache, kurze Saetze (max. 12 Woerter), keine Schachtelsaetze, kein Behoerdendeutsch.
+  * Hoechstens 2-3 Zahlen und hoechstens 1-2 Namen im ganzen Video. Jahreszahlen lieber umschreiben
+    ("vor ueber 600 Jahren" statt "1347"), wenn das aus dem Artikel klar hervorgeht.
+  * "Stell dir vor ..." nutzen, damit man sich reinversetzen kann. Zeig, was das fuer einen ganz normalen
+    Menschen damals bedeutet hat.
+  * Vergleiche mit der Welt von heute: Handy, Job, Fussballfeld, Supermarkt, Wohnung, Auto usw.
+  * Gefuehl rein: Was ist daran gruselig, eklig, lustig, unfair oder genial?
+- KOMPLIZIERTES EINFACH MACHEN: Erklaere so, dass es jeder ohne Vorwissen sofort versteht.
   Jeder Fachbegriff, jedes Fremdwort, jeder unbekannte Ort und jede Epoche bekommt sofort eine kurze,
   einfache Erklaerung ("ein Gasometer, also ein riesiger Speicher fuer Gas"). Lieber ein Detail weglassen
   als etwas unerklaert lassen. Bildhafte Vergleiche aus dem Alltag sind erlaubt ("so hoch wie ein
@@ -496,7 +522,7 @@ STIL:
 - Aufbau: Hook -> Einordnung (was/wo/wann) -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
 - Bei historischen Themen: Lass den Zuschauer spueren, wie anders das Leben damals war (Vergleich mit heute,
   aber nur mit Fakten aus dem Artikel). Ton: "unnuetzes Wissen", das man beim naechsten Treffen erzaehlen will.
-- Kurze, lebendige Saetze, Du-Ansprache, locker aber nicht cringe. Keine Emojis, keine Klammern,
+- Kurze, lebendige Saetze, Du-Ansprache, locker aber nicht cringe (keine Jugendwoerter erzwingen). Keine Emojis, keine Klammern,
   keine Abkuerzungen, keine Sonderzeichen. Der Text wird von einer Computerstimme vorgelesen.
 - 8 bis 12 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
 - VIRAL-REGELN:
