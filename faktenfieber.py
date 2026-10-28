@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v3.4
+FAKTENFIEBER – Pipeline v3.5
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -1817,25 +1817,59 @@ def tg(methode, **daten):
         return {}
 
 
-def modus_erstellen():
-    """Baut das Video fuer den naechsten Slot und schickt es mit Freigabe-Knoepfen an Telegram."""
+def _ziel_slot(st):
+    """Welcher Termin soll gebaut werden? SLOT='sofort' = Extra-Video, das man direkt posten kann."""
+    wunsch = os.environ.get("SLOT", "").strip()
+    if wunsch.lower() in ("sofort", "extra", "jetzt"):
+        t = jetzt().replace(second=0, microsecond=0)
+        while t.strftime("%Y-%m-%d %H:%M") in st["slots"]:      # nie einen bestehenden Termin ueberschreiben
+            t += timedelta(minutes=1)
+        return t.strftime("%Y-%m-%d %H:%M"), True
+    return (wunsch or naechster_slot()), st["slots"].get(wunsch, {}).get("extra", False)
+
+
+def video_noetig():
     st = status_laden()
-    slot = os.environ.get("SLOT", "").strip() or naechster_slot()
+    slot, _ = _ziel_slot(st)
+    status = st["slots"].get(slot, {}).get("status")
+    return status not in ("wartet", "freigegeben", "gepostet"), slot, status
+
+
+def modus_noetig():
+    """Schneller Vorab-Check fuer GitHub: muss ueberhaupt ein Video gebaut werden? (spart Minuten)"""
+    noetig, slot, status = video_noetig()
+    log(f"Termin {slot}: {'Video wird gebaut' if noetig else f'schon erledigt ({status})'}")
+    with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as f:
+        f.write(f"noetig={'1' if noetig else '0'}\n")
+
+
+def knoepfe_fuer(slot, extra=False):
+    if extra:
+        return [[{"text": "🚀 Jetzt posten", "callback_data": f"jetzt|{slot}"},
+                 {"text": "❌ Neu machen", "callback_data": f"neu|{slot}"}]]
+    return [[{"text": "✅ Freigeben", "callback_data": f"ok|{slot}"},
+             {"text": "❌ Neu machen", "callback_data": f"neu|{slot}"}],
+            [{"text": "🚀 Jetzt sofort posten", "callback_data": f"jetzt|{slot}"}]]
+
+
+def modus_erstellen():
+    """Baut das Video fuer den naechsten Slot (oder ein Extra-Video) und schickt es mit Knoepfen an Telegram."""
+    st = status_laden()
+    slot, extra = _ziel_slot(st)
     eintrag = st["slots"].get(slot, {})
     if eintrag.get("status") in ("wartet", "freigegeben", "gepostet"):
         log(f"Fuer {slot} gibt es schon ein Video ({eintrag['status']}) – nichts zu tun.")
         return
-    log(f"Erstelle Video fuer {slot} ...")
+    log(f"Erstelle {'Extra-Video' if extra else 'Video'} fuer {slot} ...")
     video, daten, check, dauer = erstelle_video()
     uhrzeit = slot.split(" ")[1]
     tag = "heute" if slot_zeit(slot).date() == jetzt().date() else slot_zeit(slot).strftime("%d.%m.")
-    knoepfe = [[{"text": "✅ Freigeben", "callback_data": f"ok|{slot}"},
-                {"text": "❌ Neu machen", "callback_data": f"neu|{slot}"}]]
-    msg = telegram_senden(video, daten, check, dauer, knoepfe=knoepfe,
-                          kopfzeile=f"🗓 Geplant für {tag} {uhrzeit} Uhr\n\n")
+    kopf = ("⚡ Extra-Video – geht raus, sobald du auf 🚀 drückst\n\n" if extra else
+            f"🗓 Geplant für {tag} {uhrzeit} Uhr\n✅ = pünktlich posten · 🚀 = sofort posten · ❌ = neues Video\n\n")
+    msg = telegram_senden(video, daten, check, dauer, knoepfe=knoepfe_fuer(slot, extra), kopfzeile=kopf)
     st = status_laden()                           # neu laden (koennte sich geaendert haben)
     st["slots"][slot] = {"status": "wartet", "run_id": os.environ.get("GITHUB_RUN_ID", ""),
-                         "message_id": msg, "titel": daten["titel"],
+                         "message_id": msg, "titel": daten["titel"], "extra": extra,
                          "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat()}
     status_speichern(st)
     log(f"FERTIG: Video fuer {slot} wartet auf Freigabe")
@@ -1886,7 +1920,7 @@ def modus_pruefen():
     # 2) Faellige Videos posten, verfallene melden, Erinnerungen
     for slot, eintrag in sorted(st["slots"].items()):
         zeit = slot_zeit(slot)
-        if eintrag.get("status") == "freigegeben" and jetzt() >= zeit - timedelta(minutes=3):
+        if eintrag.get("status") == "freigegeben" and (eintrag.get("sofort") or jetzt() >= zeit - timedelta(minutes=5)):
             try:
                 video, meta = _artefakt_laden(eintrag["run_id"])
                 ergebnis = veroeffentlichen(video, meta, einzeln=False)
@@ -1899,9 +1933,16 @@ def modus_pruefen():
                 log(f"{slot}: Posten fehlgeschlagen: {e}")
                 if eintrag["fehler"] >= 3:
                     eintrag["status"] = "fehler"
-                    telegram_text(f"❌ Video für {slot} konnte nicht gepostet werden:\n{e}")
+                    telegram_text(f"❌ Video für {slot} konnte endgültig nicht gepostet werden:\n{e}")
+                else:
+                    telegram_text(f"⚠️ Posten von „{eintrag.get('titel', slot)}“ hat nicht geklappt "
+                                  f"(Versuch {eintrag['fehler']}/3). Ich probiere es gleich nochmal.\n\n{e}")
             status_speichern(st)                  # sofort sichern, damit nie doppelt gepostet wird
         elif eintrag.get("status") == "wartet":
+            if eintrag.get("extra"):
+                if jetzt() > zeit + timedelta(hours=12):
+                    eintrag["status"] = "verfallen"
+                continue
             if jetzt() > verfall_zeit(slot):
                 eintrag["status"] = "verfallen"
                 tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
@@ -1954,18 +1995,30 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
     """✅ / ❌ fuer einen Termin umsetzen."""
     antwort = (lambda text: tg("answerCallbackQuery", callback_query_id=cb_id, text=text)) if cb_id else (lambda text: None)
     eintrag = st["slots"].get(slot)
-    if not eintrag or eintrag.get("status") != "wartet":
+    darf = ("wartet", "freigegeben") if aktion == "jetzt" else ("wartet",)
+    if not eintrag or eintrag.get("status") not in darf:
         antwort("Schon erledigt 👍")
         if vom_tuersteher and eintrag:
             telegram_text(f"ℹ️ Für {slot} ist schon alles erledigt (Status: {eintrag.get('status')}).")
         return
     uhr = slot.split(" ")[1]
-    if aktion == "ok":
+    if aktion == "jetzt":
         eintrag["status"] = "freigegeben"
-        antwort(f"✅ Freigegeben für {uhr} Uhr")
+        eintrag["sofort"] = True
+        antwort("🚀 Wird jetzt gepostet!")
         tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
-           reply_markup=json.dumps({"inline_keyboard": [[{"text": f"✅ Freigegeben – geht um {uhr} Uhr raus",
-                                                           "callback_data": "x"}]]}))
+           reply_markup=json.dumps({"inline_keyboard": [[{"text": "🚀 Wird gerade gepostet …", "callback_data": "x"}]]}))
+        log(f"{slot}: sofort posten")
+    elif aktion == "ok":
+        eintrag["status"] = "freigegeben"
+        spaet = jetzt() >= slot_zeit(slot) - timedelta(minutes=5)
+        antwort("✅ Freigegeben – geht sofort raus" if spaet else f"✅ Freigegeben für {uhr} Uhr")
+        tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+           reply_markup=json.dumps({"inline_keyboard": [
+               [{"text": "✅ Freigegeben – geht jetzt raus" if spaet else f"✅ Freigegeben – geht um {uhr} Uhr raus",
+                 "callback_data": "x"}],
+               [{"text": "🚀 Doch jetzt sofort posten", "callback_data": f"jetzt|{slot}"}]] if not spaet else [
+               [{"text": "✅ Freigegeben – geht jetzt raus", "callback_data": "x"}]]}))
         log(f"{slot}: freigegeben")
     elif aktion == "neu":
         if eintrag.get("neu_gemacht", 0) >= MAX_NEU:
@@ -2028,7 +2081,7 @@ def telegram_text(text):
 if __name__ == "__main__":
     try:
         modus = sys.argv[1] if len(sys.argv) > 1 else "test"
-        {"test": main, "erstellen": modus_erstellen, "pruefen": modus_pruefen}[modus]()
+        {"test": main, "erstellen": modus_erstellen, "pruefen": modus_pruefen, "noetig": modus_noetig}[modus]()
     except SystemExit as e:
         if e.code not in (0, None):
             telegram_text(f"❌ Faktenfieber: Kein Video erstellt.\n{e.code}")
