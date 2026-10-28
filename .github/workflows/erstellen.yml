@@ -12,6 +12,10 @@ on:
         description: "Termin (leer = naechster, sofort = Extra-Video), z. B. 2026-10-29 18:00"
         required: false
         default: ""
+      thema:
+        description: "Wunschthema fuer ein Extra-Video (optional), z. B. Pest im Mittelalter"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -26,8 +30,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
-      - name: Code holen
+      - name: Code holen (immer der neueste Stand)
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Python einrichten
         uses: actions/setup-python@v5
@@ -59,6 +65,7 @@ jobs:
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          WUNSCH_THEMA: ${{ github.event.inputs.thema }}
         run: python faktenfieber.py erstellen
 
       - name: Video fuer spaeter aufheben
