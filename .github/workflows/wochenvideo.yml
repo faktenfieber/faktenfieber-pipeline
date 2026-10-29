@@ -1,0 +1,58 @@
+name: Wochen-Video
+
+# Sonntags: die 5 besten Videos der Woche als ein laengeres Video auf YouTube (Wiedergabezeit!).
+# Startet normal ueber den Cloudflare-Wecker (Sonntag 10:00) oder mit /wochenvideo.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: faktenfieber-daten
+  cancel-in-progress: false
+
+jobs:
+  wochenvideo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Code holen (immer der neueste Stand)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Programme installieren
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          pip install -q requests pillow
+
+      - name: Wochen-Video bauen + hochladen
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          YT_SICHTBARKEIT: ${{ vars.YT_SICHTBARKEIT || 'private' }}
+        run: python faktenfieber.py wochenvideo
+
+      - name: Statistik speichern
+        if: always()
+        run: |
+          git config user.name "faktenfieber-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/
+          git commit -m "Wochen-Video" || echo "Nichts zu speichern"
+          git pull --rebase -q || true
+          git push
