@@ -1568,12 +1568,31 @@ def bild_rendern(bild, dauer, ziel, nummer):
 MUSIK_CACHE = ROOT / "data" / "musik"            # erfolgreich geladene Tracks werden hier gesammelt
 MUSIK_CACHE_MAX = 25
 USED_MUSIK = ROOT / "data" / "used_music.json"
-MUSIK_LAUTSTAERKE = float(os.environ.get("MUSIK_LAUTSTAERKE", "0.11"))   # bewusst leise
-MYTHISCH = ["mystical ambient", "ethereal ambient", "atmospheric ambient", "fantasy ambient",
-            "dark ambient calm", "cinematic ambient", "meditation ambient", "dreamy ambient"]
-STIMMUNG_SUCHE = {k: MYTHISCH for k in ("spannend", "mysterioes", "dramatisch", "froehlich", "episch",
-                                         "historisch", "kurios", "ruhig", "mythisch")}
-ENTSPANNT = ["calm ambient", "soft piano ambient", "relaxing ambient", "ambient background", "peaceful ambient"]
+MUSIK_LAUTSTAERKE = float(os.environ.get("MUSIK_LAUTSTAERKE", "0.09"))   # bewusst leise
+# Nur zwei Stimmungen, beide leise und ruhig:
+#  "sanft"    = normale Themen: weiches Piano, sanftes Ambient
+#  "mystisch" = Mord, Raetsel, Katastrophen, Gruseliges: etwas geheimnisvoller, aber NIE aggressiv
+SANFT = ["soft piano", "calm piano", "gentle ambient", "peaceful piano", "relaxing piano ambient",
+         "soft ambient", "calm background music", "gentle instrumental"]
+MYSTISCH = ["ethereal ambient", "mysterious ambient calm", "atmospheric piano", "soft mysterious",
+            "calm ambient pad", "dreamy ambient", "melancholic piano"]
+STIMMUNG_SUCHE = {"sanft": SANFT, "mystisch": MYSTISCH}
+ENTSPANNT = ["calm ambient", "soft piano ambient", "relaxing ambient", "peaceful ambient"]
+DUNKLE_THEMEN = re.compile(r"(mord|moerder|mörder|kill|serienm|verbrech|krimin|\btot(e|en)?\b|\btod\b|leiche|gift|geist|spuk|"
+                           r"fluch|raetsel|rätsel|mysteri|verschwund|verschollen|katastroph|unglueck|unglück|"
+                           r"absturz|explosion|krieg|schlacht|\bpest\b|seuche|hinricht|folter|hexe|vampir|\bgrab\b|"
+                           r"untergang|sank|ungeklaert|ungeklärt|horror|grusel|unheimlich)", re.I)
+
+
+def musik_stimmung(daten):
+    """Normale Themen -> sanft, dunkle Themen (Mord, Raetsel, Katastrophe ...) -> mystisch (aber ruhig)."""
+    text = " ".join(str(daten.get(k, "")) for k in ("titel", "thema", "hook_text", "musik_stimmung"))
+    text += " " + " ".join(s.get("text", "") for s in daten.get("szenen", [])[:4])
+    if daten.get("musik_stimmung") in ("mysterioes", "dramatisch") or len(DUNKLE_THEMEN.findall(text)) >= 2:
+        return "mystisch"
+    return "sanft"
+
+
 MUSIKNACHWEIS = ""
 
 
@@ -1619,8 +1638,8 @@ def _nachweis(t):
     return f"„{t['title']}“ von {t['creator']} – {lizenz} – {t['landing']}".strip(" –")
 
 
-ARCHIV_MYTHISCH = ["ambient", "dark ambient", "atmospheric", "ethereal", "drone", "meditation", "fantasy"]
-ARCHIV_THEMEN = {k: ARCHIV_MYTHISCH for k in STIMMUNG_SUCHE}
+ARCHIV_THEMEN = {"sanft": ["piano", "relaxing", "calm", "meditation", "peaceful", "soft"],
+                 "mystisch": ["ethereal", "atmospheric", "ambient", "meditation", "dreamy"]}
 ARCHIV_ENTSPANNT = ["ambient", "relaxing", "meditation", "calm", "piano"]
 ARCHIV_LIZENZ = ('(licenseurl:*publicdomain/zero* OR licenseurl:*publicdomain/mark* OR '
                  'licenseurl:*licenses/by/* OR licenseurl:*licenses/by-sa/*)')
@@ -1634,14 +1653,19 @@ VERBOTEN = ["speech", "spoken", "vocal", "vocals", "voice", "singer", "song", "l
             # zu wild fuer leise Hintergrundmusik:
             "drum", "drums", "beat", "beats", "techno", "dubstep", "rock", "metal", "punk", "edm", "dance",
             "trap", "breakbeat", "hardcore", "house", "trance", "dnb", "jungle", "industrial", "noise",
-            "glitch", "electro", "funk", "party", "club", "aggressive", "hard", "rave"]
+            "glitch", "electro", "funk", "party", "club", "aggressive", "hard", "rave",
+            # zu duester/unruhig:
+            "drone", "dark ambient", "horror", "scary", "harsh", "experimental", "doom", "black", "ritual",
+            "distort", "psychedelic", "epic", "action", "battle", "war", "tension", "suspense", "thriller",
+            "power", "bass", "dub", "chiptune", "8-bit", "8bit", "field recording", "soundscape", "abstract"]
 VERBOTEN_SUCHE = " OR ".join(f'"{v}"' for v in VERBOTEN)
 INSTRUMENTAL_BONUS = ["instrumental", "ambient", "piano", "orchestral", "cinematic", "soundtrack", "lofi", "chill"]
 
 
 def _verboten(*texte):
     t = " ".join(str(x) for x in texte).lower()
-    return any(re.search(rf"\b{re.escape(v)}", t) for v in VERBOTEN)
+    # kurze Woerter nur als ganzes Wort ("war" soll nicht "warm" treffen), lange auch als Wortanfang
+    return any(re.search(rf"\b{re.escape(v)}(s|es)?\b" if len(v) <= 5 else rf"\b{re.escape(v)}", t) for v in VERBOTEN)
 
 
 def hat_stimme(pfad):
@@ -1673,6 +1697,66 @@ def hat_stimme(pfad):
 
 
 _WHISPER = None
+
+
+def klingt_ruhig(pfad):
+    """Hoert objektiv rein: keine Schlagzeug-/Beat-Impulse, nicht grell, kein Rauschen, keine wilden Sprunge.
+    Gibt (ok, grund) zurueck. Ohne numpy wird nicht geprueft."""
+    try:
+        import numpy as np
+    except ImportError:
+        return True, ""
+    try:
+        laenge = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
+                                       "csv=p=0", str(pfad)], capture_output=True, text=True).stdout or 0)
+        sr, fen = 22050, 1024
+        werte = {"impulse": [], "hell": [], "rauschen": [], "spruenge": []}
+        for start in (min(20, laenge * 0.15), laenge * 0.45, max(0, laenge * 0.7)):
+            roh = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{start:.1f}", "-t", "20", "-i", str(pfad),
+                                  "-ac", "1", "-ar", str(sr), "-f", "s16le", "-"], capture_output=True).stdout
+            x = np.frombuffer(roh, dtype=np.int16).astype(np.float32) / 32768
+            if len(x) < sr * 5:
+                continue
+            n = len(x) // fen
+            frames = x[:n * fen].reshape(n, fen)
+            rms_db = 20 * np.log10(np.sqrt((frames ** 2).mean(axis=1)) + 1e-6)
+            laut = rms_db > rms_db.max() - 40                       # Stille ignorieren
+            if laut.sum() < 20:
+                continue
+            spek = np.abs(np.fft.rfft(frames * np.hanning(fen), axis=1)) ** 2
+            freqs = np.fft.rfftfreq(fen, 1 / sr)
+            # 1) Schlagzeug/Beats: viele ploetzliche Energie-Anstiege (spektraler Fluss) pro Sekunde
+            # (nur Frequenzen ueber 2,5 kHz: dort sitzen Snare/Hi-Hat; weiche Klaviertoene loesen das nicht aus)
+            fluss = np.maximum(np.diff(np.sqrt(spek[:, freqs > 2500]), axis=0), 0).sum(axis=1)
+            schwelle = np.median(fluss) * 4 + 1e-9
+            hf_anteil = spek[:, freqs > 2500].sum(axis=1) / (spek.sum(axis=1) + 1e-12)
+            spitzen = ((fluss[1:-1] > schwelle) & (fluss[1:-1] > fluss[:-2]) & (fluss[1:-1] >= fluss[2:])
+                       & (hf_anteil[2:-1] > 0.04))      # nur echte Schlaege mit spuerbarem Hoehen-Anteil
+            werte["impulse"].append(spitzen.sum() / (n * fen / sr))
+            # 2) Grell/aggressiv: viel Energie ueber 4 kHz
+            werte["hell"].append(spek[laut][:, freqs > 4000].sum() / (spek[laut].sum() + 1e-9))
+            # 3) Rauschen: spektrale Flachheit
+            s_l = spek[laut][:, (freqs > 100) & (freqs < 8000)] + 1e-12
+            werte["rauschen"].append(float(np.median(np.exp(np.log(s_l).mean(axis=1)) / s_l.mean(axis=1))))
+            # 4) wilde Lautstaerke-Spruenge
+            glatt = np.convolve(rms_db, np.ones(5) / 5, mode="valid")
+            werte["spruenge"].append(float(np.percentile(np.abs(np.diff(glatt)), 98)))
+        if not werte["impulse"]:
+            return True, ""
+        imp, hell = max(werte["impulse"]), max(werte["hell"])
+        rau, spr = max(werte["rauschen"]), max(werte["spruenge"])
+        if imp > 1.6:
+            return False, f"zu viele Beats/Schlaege ({imp:.1f}/s)"
+        if hell > 0.10:
+            return False, f"zu grell ({hell * 100:.0f} % Hoehen)"
+        if rau > 0.35:
+            return False, f"zu rauschig ({rau:.2f})"
+        if spr > 4.5:
+            return False, f"zu unruhig ({spr:.1f} dB Spruenge)"
+        return True, f"Beats {imp:.1f}/s, Hoehen {hell * 100:.0f} %, Rauschen {rau:.2f}"
+    except Exception as e:
+        log(f"   Ruhe-Check nicht moeglich ({e.__class__.__name__})")
+        return True, ""
 
 
 def _archive(themen):
@@ -1776,9 +1860,16 @@ def _laden(t):
         ziel.unlink(missing_ok=True)
         _merke_musik(t["id"])                      # nie wieder vorschlagen
         return None
+    ruhig, grund = klingt_ruhig(ziel)
+    if not ruhig:
+        log(f"   ✗ {t['title'][:50]}: {grund} -> aussortiert")
+        ziel.unlink(missing_ok=True)
+        _merke_musik(t["id"])
+        return None
+    log(f"   ✓ ruhig genug ({grund})")
     index = _lade_json(MUSIK_CACHE / "index.json") or {}
     index[ziel.name] = {"nachweis": _nachweis(t), "stimmung": t.get("_stimmung", ""), "tags": t.get("tags", ""),
-                        "ohne_stimme": True}
+                        "ohne_stimme": True, "ruhig_geprueft": True}
     for alt in list(index)[:-MUSIK_CACHE_MAX]:
         (MUSIK_CACHE / alt).unlink(missing_ok=True)
         index.pop(alt, None)
@@ -1790,12 +1881,12 @@ def musik_waehlen(daten):
     """Die KI waehlt aus frei lizenzierten Tracks den passendsten. Sonst entspannte Musik,
     sonst ein Track aus dem selbst gesammelten Archiv, und als allerletztes ein selbst erzeugter Ambient-Teppich."""
     global MUSIKNACHWEIS
-    stimmung = "mythisch"                         # immer ruhige, mystische Hintergrundmusik
-    if stimmung not in ARCHIV_THEMEN:
-        stimmung = "spannend"
+    stimmung = musik_stimmung(daten)
+    daten["_musik_stimmung"] = stimmung
+    log(f"🎵 Musik-Stimmung: {stimmung}")
     zuletzt = set((_lade_json(USED_MUSIK) or [])[-12:])
-    runden = [(STIMMUNG_SUCHE.get(stimmung, STIMMUNG_SUCHE["spannend"]), ARCHIV_THEMEN[stimmung], stimmung),
-              (ENTSPANNT, ARCHIV_ENTSPANNT, "ruhig")]
+    runden = [(STIMMUNG_SUCHE[stimmung], ARCHIV_THEMEN[stimmung], stimmung),
+              (ENTSPANNT, ARCHIV_ENTSPANNT, "sanft")]
     for runde, (openverse_q, archiv_q, label) in enumerate(runden):
         kandidaten = {}
         for t in _archive(archiv_q):
@@ -1815,8 +1906,11 @@ def musik_waehlen(daten):
         try:
             auswahl = "\n".join(f"{i}: {t['title'][:70]} | {t['tags'][:60]}" for i, t in enumerate(liste))
             prompt = f"""Du bist Musik-Supervisor fuer einen YouTube-Short ueber: "{daten.get('titel')}" ({daten.get('thema')}).
-Gewuenschte Stimmung: ruhig, mystisch, atmosphaerisch, schwebend, eher langsam. Die Musik laeuft
-SEHR LEISE unter einer Erzaehlstimme und darf nie ablenken. Keine Beats, kein Schlagzeug, nichts Hektisches.
+Gewuenschte Stimmung: {"sanft, warm, entspannt (z. B. ruhiges Klavier, weiches Ambient)" if stimmung == "sanft" else
+"leicht geheimnisvoll, aber sanft und ruhig (z. B. schwebendes Ambient, melancholisches Klavier) - NICHT gruselig, NICHT bedrohlich"}.
+Die Musik laeuft SEHR LEISE unter einer Erzaehlstimme und darf NIE stoeren oder ablenken.
+Keine Beats, kein Schlagzeug, nichts Hektisches, nichts Duesteres, keine Spannungs- oder Horror-Musik.
+Im Zweifel IMMER die ruhigere Wahl.
 Waehle die 4 passendsten Tracks/Alben. NUR reine Instrumentalmusik!
 Absolut verboten: Gesang, Sprache, Reden, Rap, Hoerspiele, Nachrichten, historische Tonaufnahmen,
 Podcasts, Lesungen, Weihnachtslieder, Noise und Field-Recordings.
@@ -1840,13 +1934,14 @@ Antworte NUR mit JSON: {{"auswahl": [Nummer1, Nummer2, Nummer3, Nummer4], "warum
 
     index = _lade_json(MUSIK_CACHE / "index.json") or {}
     for n, i in list(index.items()):
-        if not i.get("ohne_stimme"):               # alte, ungepruefte Tracks raus
+        if not i.get("ohne_stimme") or not i.get("ruhig_geprueft"):   # alte, ungepruefte Tracks raus
             (MUSIK_CACHE / n).unlink(missing_ok=True)
             index.pop(n)
     if MUSIK_CACHE.exists():
         (MUSIK_CACHE / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=1), encoding="utf-8")
-    archiv = [(n, i) for n, i in index.items() if (MUSIK_CACHE / n).exists()]
-    ruhig = [a for a in archiv if a[1].get("stimmung") in ("ruhig", "mythisch")]
+    archiv = [(n, i) for n, i in index.items() if (MUSIK_CACHE / n).exists() and i.get("ruhig_geprueft")]
+    ruhig = ([a for a in archiv if a[1].get("stimmung") == stimmung]
+             or [a for a in archiv if a[1].get("stimmung") in ("sanft", "mystisch")])
     if ruhig:
         name, info = random.choice(ruhig)
         MUSIKNACHWEIS = info.get("nachweis", "")
@@ -1895,9 +1990,9 @@ def audio_mischen(stimme, musik, gesamt, ziel):
         pass
     filt = (f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={gesamt:.2f},asplit=2[stimme][sc];"
             f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:{gesamt:.2f},asetpts=PTS-STARTPTS,"
-            f"acompressor=threshold=0.1:ratio=3:attack=50:release=600,lowpass=f=6500,"   # Spitzen glaetten, weicher
+            f"acompressor=threshold=0.08:ratio=4:attack=80:release=800,highpass=f=70,lowpass=f=4200,"   # weich + unaufdringlich
             f"volume={musik_lautstaerke_aktuell()},afade=t=in:d=0.2,afade=t=out:st={max(0, gesamt - 0.4):.2f}:d=0.4[m];"
-            f"[m][sc]sidechaincompress=threshold=0.04:ratio=5:attack=20:release=400[musik];"
+            f"[m][sc]sidechaincompress=threshold=0.03:ratio=6:attack=20:release=500[musik];"
             f"[stimme][musik]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=11,"
             f"alimiter=limit=0.95[out]")
     ffmpeg("-i", stimme, "-ss", f"{start:.1f}", "-stream_loop", "-1", "-i", musik,
@@ -2471,10 +2566,47 @@ def instagram_hochladen(video, daten):
                 pass
         link = requests.get(f"{IG_API}/{media}", timeout=30,
                             params={"fields": "permalink", "access_token": IG_TOKEN}).json().get("permalink", "")
+        if story_an() and not daten.get("_lang"):
+            daten["_ig_story"] = instagram_story(video_url)
         log(f"Instagram-Upload ok: {link or media}")
         daten["_ig_media_id"] = media
         return link or media
     raise RuntimeError("Instagram-Upload fehlgeschlagen: " + " | ".join(fehler))
+
+
+def story_an():
+    try:
+        return json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("story", True)
+    except Exception:
+        return True
+
+
+def instagram_story(video_url):
+    """Teilt das Video zusaetzlich als Story (Instagram erlaubt per API kein Liken/Reposten eigener Reels -
+    die Story ist der offizielle Weg, das Reel nochmal allen Followern zu zeigen)."""
+    try:
+        r = requests.post(f"{IG_API}/{IG_USER}/media", timeout=60, data={
+            "media_type": "STORIES", "video_url": video_url, "access_token": IG_TOKEN})
+        if r.status_code != 200 or "id" not in r.json():
+            log(f"Story nicht moeglich: {r.text[:200]}")
+            return False
+        container = r.json()["id"]
+        for _ in range(24):
+            time.sleep(10)
+            st = requests.get(f"{IG_API}/{container}", timeout=30,
+                              params={"fields": "status_code", "access_token": IG_TOKEN}).json()
+            if st.get("status_code") in ("FINISHED", "ERROR", "EXPIRED"):
+                break
+        if st.get("status_code") != "FINISHED":
+            log(f"Story-Verarbeitung: {st}")
+            return False
+        r = requests.post(f"{IG_API}/{IG_USER}/media_publish", timeout=60,
+                          data={"creation_id": container, "access_token": IG_TOKEN})
+        log("Instagram: Story gepostet" if r.status_code == 200 else f"Story-Veroeffentlichung: {r.text[:200]}")
+        return r.status_code == 200
+    except Exception as e:
+        log(f"Story-Fehler: {e}")
+        return False
 
 
 # ---------------------------------------------------------------- Video erstellen (gemeinsamer Kern)
@@ -2760,7 +2892,7 @@ def modus_pruefen():
     befehl = os.environ.get("AKTION", "")
     if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht", "idee", "ideen", "ideen_leeren",
                   "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen", "kommentare", "kibilder",
-                  "dashboard", "serie", "ziel"):
+                  "dashboard", "serie", "ziel", "story"):
         befehl_ausfuehren(st, befehl)
         status_speichern(st)
         if befehl == "status":
@@ -2870,7 +3002,7 @@ def posting_melden(eintrag, meta, ergebnis):
     else:
         zeilen.append(f"❌ YouTube hat nicht geklappt:\n{ergebnis.get('youtube_fehler', 'unbekannter Fehler')}")
     if ergebnis.get("instagram"):
-        zeilen.append(f"📸 Instagram:\n{ergebnis['instagram']}")
+        zeilen.append(f"📸 Instagram:\n{ergebnis['instagram']}" + ("\n📲 + als Story geteilt" if meta.get("_ig_story") else ""))
     else:
         zeilen.append(f"❌ Instagram hat nicht geklappt:\n{ergebnis.get('instagram_fehler', 'unbekannter Fehler')}")
     alles_ok = ergebnis.get("youtube") and ergebnis.get("instagram")
@@ -3553,13 +3685,13 @@ def befehl_ausfuehren(st, befehl):
     if befehl == "musik":
         wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
         alt = float(st.get("musik_lautstaerke", MUSIK_LAUTSTAERKE))
-        neu = {"leiser": alt * 0.7, "lauter": alt * 1.35, "aus": 0.0, "an": 0.11, "normal": 0.11}.get(wahl)
+        neu = {"leiser": alt * 0.7, "lauter": alt * 1.35, "aus": 0.0, "an": MUSIK_LAUTSTAERKE, "normal": MUSIK_LAUTSTAERKE}.get(wahl)
         if neu is None:
-            stufe = "aus" if alt == 0 else f"{round(alt / 0.11 * 100)} %"
+            stufe = "aus" if alt == 0 else f"{round(alt / MUSIK_LAUTSTAERKE * 100)} %"
             telegram_text(f"🎵 Musik-Lautstärke: {stufe} (100 % = Standard)\n/musik leiser · /musik lauter · /musik aus · /musik normal")
             return
         st["musik_lautstaerke"] = round(min(neu, 0.35), 3)
-        stufe = "aus" if neu == 0 else f"{round(st['musik_lautstaerke'] / 0.11 * 100)} %"
+        stufe = "aus" if neu == 0 else f"{round(st['musik_lautstaerke'] / MUSIK_LAUTSTAERKE * 100)} %"
         telegram_text(f"🎵 Musik ist jetzt: {stufe}. Gilt ab dem nächsten Video.")
         return
     if befehl == "einstellungen":
@@ -3567,10 +3699,11 @@ def befehl_ausfuehren(st, befehl):
                       f"🤖 Auto-Modus: {'AN (postet ohne Freigabe)' if st.get('auto') else 'AUS (Freigabe nötig)'}\n"
                       f"⏸ Pause: {'AN' if st.get('pause') else 'aus'}\n"
                       f"🎙 Stimme: {st.get('stimme') or TTS_STIMME}\n"
-                      f"🎵 Musik: {'aus' if float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) == 0 else str(round(float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) / 0.11 * 100)) + ' %'}\n"
+                      f"🎵 Musik: {'aus' if float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) == 0 else str(round(float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) / MUSIK_LAUTSTAERKE * 100)) + ' %'}\n"
                       f"🧠 Schwierigkeit: {st.get('max_schwierigkeit', MAX_SCHWIERIGKEIT)}\n"
                       f"📺 Themen-Tage: {'an' if st.get('serie') else 'aus'}\n"
                       f"💬 Kommentar-Vorschläge: {'an' if st.get('kommentare_an', True) else 'aus'}\n"
+                      f"📲 Auto-Story: {'an' if st.get('story', True) else 'aus'}\n"
                       f"🎨 KI-Illustrationen: {'an' if st.get('ki_bilder', True) else 'aus'}\n"
                       f"📊 Dashboard: {'an' if st.get('dashboard') else 'aus'}\n"
                       f"🗓 Termine: {', '.join(f'{h:02d}:{m:02d}' for h, m in SLOTS)}\n"
@@ -3595,6 +3728,15 @@ def befehl_ausfuehren(st, befehl):
         telegram_text(f"🎨 KI-Illustrationen sind {'AN' if st.get('ki_bilder', True) else 'AUS'}. Sie springen nur ein, "
                       f"wenn es keine echten Bilder/Clips gibt, und sind immer als „KI-Illustration“ gekennzeichnet. "
                       f"Funktioniert nur mit Gemini-Abrechnung (sonst wird es automatisch übersprungen).")
+        return
+    if befehl == "story":
+        wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+        if wahl in ("an", "aus"):
+            st["story"] = wahl == "an"
+        telegram_text(f"📲 Auto-Story ist {'AN' if st.get('story', True) else 'AUS'}: Jedes Reel wird zusätzlich als "
+                      f"Story geteilt, damit es alle Follower nochmal sehen. (/story an · /story aus)\n"
+                      f"ℹ️ Eigene Reels liken oder reposten erlaubt Instagram über die Schnittstelle nicht – "
+                      f"die Story ist der offizielle Weg dafür.")
         return
     if befehl == "kommentare":
         wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
