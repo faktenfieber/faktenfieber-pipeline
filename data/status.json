@@ -92,7 +92,7 @@
    }
   },
   "2026-10-29 10:35": {
-   "status": "wartet",
+   "status": "verfallen",
    "run_id": "40850790068",
    "message_id": 111,
    "titel": "Wie ein Seattle‑Kid die Short‑Track‑Welt eroberte",
@@ -183,21 +183,21 @@
    "gepostet_um": "2026-10-29T19:15:36.519765+01:00"
   },
   "2026-10-29 23:22": {
-   "status": "wartet",
+   "status": "verworfen",
    "auto": false,
    "run_id": "40965245394",
    "message_id": 165,
    "titel": "iPhone 12 kommt ohne Stromkabel",
    "thema": "IPhone 12",
    "extra": true,
-   "neu_gemacht": 0,
+   "neu_gemacht": 1,
    "erstellt": "2026-10-29T23:27:11.341981+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
  "max_schwierigkeit": 7.0,
  "token_check": "2026-10-29",
- "kommentare_check": "2026-10-29T18:10:55.668033+01:00",
+ "kommentare_check": "2026-10-29T23:29:08.932697+01:00",
  "ig_name": "faktenfieber.official",
  "kommentare_gesehen": [],
  "antworten": {},
