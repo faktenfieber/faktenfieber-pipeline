@@ -144,6 +144,16 @@
    "extra": false,
    "neu_gemacht": 1,
    "erstellt": "2026-10-29T15:45:36.967051+01:00"
+  },
+  "2026-10-29 16:31": {
+   "status": "wartet",
+   "run_id": "40902260399",
+   "message_id": 135,
+   "titel": "Katja Gloger: Von Moskau bis Washington – Die Journalistin, die die Welt bewegte",
+   "thema": "Katja Gloger",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-29T16:46:14.926786+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
