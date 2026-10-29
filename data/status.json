@@ -77,7 +77,7 @@
    }
   },
   "2026-10-29 08:00": {
-   "status": "wartet",
+   "status": "gepostet",
    "run_id": "40818154146",
    "message_id": 103,
    "titel": "Die geheimnisvolle Bibliothek von Alexandria – was wirklich geschah",
@@ -85,7 +85,11 @@
    "neu_gemacht": 0,
    "erstellt": "2026-10-29T05:36:18.819546+01:00",
    "erinnert": true,
-   "erinnert2": true
+   "erinnert2": true,
+   "links": {
+    "youtube_fehler": "YouTube-Upload-Start fehlgeschlagen: 400 {\n  \"error\": {\n    \"code\": 400,\n    \"message\": \"The user has exceeded the number of videos they may upload.\",\n    \"errors\": [\n      {\n        \"message\": \"The user has exceeded the number of videos they may upload.\",\n        \"domain\": \"youtube.video\",\n        ",
+    "instagram": "https://www.instagram.com/reel/DfEo8mtFQbt/"
+   }
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
