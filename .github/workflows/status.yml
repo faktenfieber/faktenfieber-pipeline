@@ -1,12 +1,12 @@
 name: Status
 
-# Schickt dir Status, Statistik oder Wochenbericht nach Telegram (/status, /stats).
+# Schickt dir Status, Statistik, Ziel oder Wochenbericht nach Telegram (/status, /stats, /ziel).
 # Liest nur – deshalb keine Warteschlange, kommt immer sofort.
 on:
   workflow_dispatch:
     inputs:
       aktion:
-        description: "status, stats oder wochenbericht"
+        description: "status, stats, ziel, wochenbericht, ..."
         required: false
         default: "status"
 
@@ -27,6 +27,7 @@ jobs:
         env:
           AKTION: ${{ github.event.inputs.aktion }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          YT_API_KEY: ${{ secrets.YT_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           YT_SICHTBARKEIT: ${{ vars.YT_SICHTBARKEIT || 'private' }}
