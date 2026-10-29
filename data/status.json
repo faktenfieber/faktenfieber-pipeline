@@ -136,14 +136,22 @@
    "erstellt": "2026-10-29T15:06:25.525319+01:00"
   },
   "2026-10-29 18:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "run_id": "40893710343",
    "message_id": 130,
    "titel": "167 Menschen mussten ihre Heimat verlassen, weil...?",
    "thema": "Operation Crossroads",
    "extra": false,
    "neu_gemacht": 1,
-   "erstellt": "2026-10-29T15:45:36.967051+01:00"
+   "erstellt": "2026-10-29T15:45:36.967051+01:00",
+   "sofort": true,
+   "fehler": 0,
+   "links": {
+    "youtube": "https://youtube.com/shorts/3vz6Jm1MQCE",
+    "instagram": "https://www.instagram.com/reel/DfFbwfyggc1/"
+   },
+   "ig_media_id": "18110786750178791",
+   "gepostet_um": "2026-10-29T17:27:38.052885+01:00"
   },
   "2026-10-29 16:31": {
    "status": "wartet",
