@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v4.5
+FAKTENFIEBER – Pipeline v5.0
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -256,6 +256,12 @@ THEMEN_SUCHE = [
     "Olympische Spiele", "Sport Kuriosität",
     # Natur & Tiere
     "Tier Rekord", "giftiges Tier", "Hai", "Dinosaurier", "Naturphänomen", "Höhle", "Meteorit",
+    # Heute: Technik, Internet, Alltag
+    "Smartphone", "Internet", "Soziales Netzwerk", "Videospiel", "Spielkonsole", "Emoji", "Computervirus",
+    "Hacker", "Künstliche Intelligenz", "Roboter", "Drohne", "Elektroauto", "Raumfahrt", "Mars", "Satellit",
+    "Fast Food", "Getränk Marke", "Süßigkeit Marke", "Sneaker", "Streaming", "Musikvideo", "Fußball Rekord",
+    "Freizeitpark", "Flughafen", "Wolkenkratzer", "Menschlicher Körper", "Schlaf", "Gehirn", "Traum",
+    "Optische Täuschung", "Rekord Mensch",
 ]
 KATEGORIE_SUCHE = "incategory:Wikipedia:Exzellent|Wikipedia:Lesenswert"
 
@@ -415,30 +421,74 @@ def speichere_thema(thema):
 
 
 WUNSCH_THEMA = os.environ.get("WUNSCH_THEMA", "").strip()
+TEIL2 = WUNSCH_THEMA.endswith(" TEIL2")
+if TEIL2:
+    WUNSCH_THEMA = WUNSCH_THEMA[:-6].strip()
 _WUNSCH_LISTE = None
+WUNSCH_HINWEIS = ""
+HOOK_STILE_TEXT = ""
+HOOK_ZULETZT = ""
+_WUNSCH_VERSUCHT = set()
 
 
 def wunsch_kandidaten():
-    """Sucht passende Wikipedia-Artikel zum Wunschthema (bevorzugt exzellente/lesenswerte)."""
+    """Findet die Wikipedia-Artikel, die WIRKLICH ueber das Wunschthema sind.
+    Reihenfolge: exakter Artikel (auch ueber Umleitungen, z. B. Handy -> Mobiltelefon) -> normale Suche."""
     global _WUNSCH_LISTE
-    if _WUNSCH_LISTE is None:
-        _WUNSCH_LISTE = []
-        for q in (f"{KATEGORIE_SUCHE} {WUNSCH_THEMA}", WUNSCH_THEMA):
-            try:
-                daten = wiki(list="search", srsearch=q, srlimit=6, srnamespace=0)
-                for t in daten.get("query", {}).get("search", []):
-                    if t["title"] not in _WUNSCH_LISTE:
-                        _WUNSCH_LISTE.append(t["title"])
-            except Exception as e:
-                log(f"Wunsch-Suche fehlgeschlagen: {e}")
-        log(f"Wunschthema '{WUNSCH_THEMA}': {_WUNSCH_LISTE[:6]}")
+    if _WUNSCH_LISTE is not None:
+        return _WUNSCH_LISTE
+    titel = []
+    # a) exakter Titel / Umleitung
+    try:
+        daten = wiki(prop="info", titles=WUNSCH_THEMA, redirects=1)
+        seite = daten["query"]["pages"][0]
+        if not seite.get("missing") and "disambiguation" not in str(seite.get("pageprops", "")):
+            titel.append(seite["title"])
+    except Exception as e:
+        log(f"Wunsch-Titelsuche: {e}")
+    # b) Titel-Vorschlaege (wie die Suchleiste auf Wikipedia)
+    try:
+        r = requests.get(WIKI_API, headers=WIKI_HEADERS, timeout=30, params={
+            "action": "opensearch", "search": WUNSCH_THEMA, "limit": 6, "namespace": 0, "redirects": "resolve"})
+        titel += r.json()[1]
+    except Exception as e:
+        log(f"Wunsch-Vorschlaege: {e}")
+    # c) Volltextsuche
+    try:
+        daten = wiki(list="search", srsearch=WUNSCH_THEMA, srlimit=8, srnamespace=0)
+        titel += [t["title"] for t in daten.get("query", {}).get("search", [])]
+    except Exception as e:
+        log(f"Wunsch-Volltextsuche: {e}")
+    titel = [t for t in dict.fromkeys(titel) if "(Begriffsklärung)" not in t and not t.startswith("Liste ")]
+    if len(titel) > 1:
+        # Die KI entscheidet, welcher Artikel am besten zum Wunsch passt
+        try:
+            intros = wiki(prop="extracts", exintro=1, explaintext=1, exlimit=20, titles="|".join(titel[:12]), redirects=1)
+            infos = {p["title"]: p.get("extract", "")[:250] for p in intros["query"]["pages"] if p.get("extract")}
+            liste = "\n\n".join(f"### {t}\n{infos[t]}" for t in titel if t in infos)
+            wahl, _ = ki(f"""Jemand will ein kurzes Fakten-Video ueber "{WUNSCH_THEMA}".
+Welche dieser Wikipedia-Artikel passen am besten (das Thema selbst, nicht nur am Rande)?
+Sortiere die 3 passendsten, bestes zuerst. Nimm bevorzugt den Hauptartikel zum Thema.
+
+{liste}
+
+Antworte NUR mit JSON: {{"titel": ["exakter Titel 1", "exakter Titel 2", "exakter Titel 3"]}}""", temperatur=0.1)
+            gewaehlt = [t for t in wahl.get("titel", []) if t in infos]
+            titel = gewaehlt + [t for t in titel if t not in gewaehlt and t in infos]
+        except Exception as e:
+            log(f"KI-Auswahl fuer Wunschthema nicht moeglich: {e}")
+    _WUNSCH_LISTE = titel
+    log(f"Wunschthema '{WUNSCH_THEMA}' -> Artikel: {titel[:5]}")
     return _WUNSCH_LISTE
 
 
 def thema_waehlen(benutzt):
     if WUNSCH_THEMA:
-        liste = [t for t in wunsch_kandidaten() if t not in benutzt]
+        alle = wunsch_kandidaten()
+        liste = [t for t in alle if t not in benutzt and t not in _WUNSCH_VERSUCHT] or \
+                [t for t in alle if t not in _WUNSCH_VERSUCHT]
         if liste:
+            _WUNSCH_VERSUCHT.add(liste[0])
             log(f"Gewaehlt (Wunsch): {liste[0]}")
             return liste[0]
         log("Zum Wunschthema nichts (mehr) gefunden, nehme ein zufaelliges Thema.")
@@ -447,9 +497,10 @@ def thema_waehlen(benutzt):
     prompt = f"""Du bist Redakteur des deutschen Shorts-Kanals FAKTENFIEBER (verrueckte, wahre Fakten und Geschichten).
 Hier sind Wikipedia-Artikel. Waehle den EINEN, aus dem sich das spannendste 45-Sekunden-Video
 fuer ein breites, junges Publikum machen laesst (ueberraschend, kurios, "das glaubt mir keiner").
-SCHWERPUNKT DES KANALS: Geschichte und wie die Menschen frueher gelebt haben (Alltag, Braeuche, Berufe,
-Strafen, Medizin, Essen, Aberglaube), kuriose historische Ereignisse, verrueckte Erfindungen und
-"unnuetzes Wissen", das man sofort weitererzaehlen will. Daneben auch erstaunliche Fakten aus Natur und Wissenschaft.
+SCHWERPUNKT DES KANALS: bunt gemischtes "unnuetzes Wissen", das man sofort weitererzaehlen will:
+Geschichte und wie die Menschen frueher gelebt haben, ABER GENAUSO Dinge von heute (Handy, Internet,
+Apps, Games, Marken, Essen, Sport, Technik, der menschliche Koerper) sowie Natur und Tiere.
+Abwechslung ist wichtig: nicht immer nur Mittelalter.
 Bevorzuge ECHTE Ereignisse, Phaenomene, Orte, Erfindungen, Kriminalfaelle, Katastrophen, Kuriositaeten.
 Meiden: Romane, Filme, Alben, Fiktion, Verwaltung, Listen, Kirchen/Gebaeude ohne Story, Biografien ohne Twist.
 ZIELGRUPPE: breites Publikum ab ca. 15, vor allem junge Erwachsene, die durch Shorts scrollen.
@@ -483,8 +534,42 @@ Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Sat
     return titel
 
 
+HOOK_STILE = {
+    "Schock-Fakt": 'den krassesten Fakt direkt als Aussage ("Dieses Schiff galt als unsinkbar. Es sank nach vier Tagen.")',
+    "Frage": 'eine Frage, auf die man die Antwort wissen will ("Warum durften Koenige nicht einfach verreisen?")',
+    "Stell dir vor": 'den Zuschauer mitten in die Situation werfen ("Stell dir vor, dein Arzt verschreibt dir Quecksilber.")',
+    "Widerspruch": 'etwas, das falsch klingt, aber stimmt ("Das erste Handy wog so viel wie eine Packung Milch.")',
+    "Zeitsprung": 'mitten in der Szene starten ("Es ist Nacht, 1912. Und keiner auf dem Schiff ahnt etwas.")',
+    "Mythos-Check": 'einen bekannten Irrtum aufgreifen ("Alle glauben, Wikinger hatten Hoerner am Helm. Falsch.")',
+    "Wusstest du": 'klassisch, aber nur ab und zu ("Wusstest du, dass ...")',
+}
+HOOK_DATEI = ROOT / "data" / "hooks.json"
+
+
+def hook_zuletzt():
+    try:
+        return json.loads(HOOK_DATEI.read_text(encoding="utf-8"))[-3:]
+    except Exception:
+        return []
+
+
+def hook_merken(stil):
+    liste = hook_zuletzt() + [stil]
+    HOOK_DATEI.parent.mkdir(parents=True, exist_ok=True)
+    HOOK_DATEI.write_text(json.dumps(liste[-10:], ensure_ascii=False), encoding="utf-8")
+
+
 def skript_erstellen(titel):
+    global WUNSCH_HINWEIS, HOOK_STILE_TEXT, HOOK_ZULETZT
+    HOOK_ZULETZT = ", ".join(hook_zuletzt()) or "(noch keine)"
+    HOOK_STILE_TEXT = "\n".join(f"  * {k}: {v}" for k, v in HOOK_STILE.items())
     titel, artikel, url = wiki_artikel(titel)
+    WUNSCH_HINWEIS = (f"\n- WUNSCH DES KANALBETREIBERS: Das Video soll um \"{WUNSCH_THEMA}\" gehen. Bleib genau bei "
+                      f"diesem Thema, auch wenn der Artikel breiter ist.") if WUNSCH_THEMA else ""
+    if TEIL2:
+        WUNSCH_HINWEIS += ("\n- DAS IST TEIL 2: Zu diesem Thema gab es schon ein Video. Nimm ANDERE Fakten und einen anderen "
+                           "Blickwinkel als die offensichtlichsten. Der Titel enthaelt \"Teil 2\". Der Einstieg darf "
+                           "kurz an Teil 1 anknuepfen (\"Im letzten Video ...\"), aber nur einen Satz lang.")
     bilder = wiki_bilder(titel)
     bildliste = "\n".join(f"{i}: {b['beschreibung']}" for i, b in enumerate(bilder)) or "(keine Bilder vorhanden)"
     prompt = f"""Du bist Autor des deutschen Faceless-Kanals FAKTENFIEBER (YouTube Shorts + Instagram Reels).
@@ -501,7 +586,11 @@ ECHTE BILDER ZUM THEMA (Nummer: Beschreibung):
 
 STIL:
 - 90 bis 110 Woerter gesprochener Text (ca. 45-52 Sekunden). NIEMALS mehr als 120 Woerter! Jedes Wort muss sitzen.
-- Der allererste Satz beginnt IMMER mit "Wusstest du" und ist ein starker Hook mit dem ueberraschendsten Detail.
+- EINSTIEG (die ersten 2 Sekunden entscheiden, ob jemand weiterwischt!): Du entscheidest selbst, wie du anfaengst.
+  Er muss sofort neugierig machen und darf NICHT langweilig oder erklaerend beginnen. Moegliche Hook-Stile:
+{HOOK_STILE_TEXT}
+  Zuletzt benutzt (bitte NICHT schon wieder): {HOOK_ZULETZT}
+  Gib den gewaehlten Stil in "hook_stil" an. Nicht immer mit "Wusstest du" anfangen.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
   Roter Faden, jeder Satz baut auf dem vorherigen auf, nichts Unverstaendliches.
@@ -530,6 +619,9 @@ STIL:
 - Aufbau: Hook -> Einordnung (was/wo/wann) -> Spannung aufbauen -> ueberraschendes Detail -> Pointe/Twist am Ende.
 - Bei historischen Themen: Lass den Zuschauer spueren, wie anders das Leben damals war (Vergleich mit heute,
   aber nur mit Fakten aus dem Artikel). Ton: "unnuetzes Wissen", das man beim naechsten Treffen erzaehlen will.
+- Bei modernen Themen (Technik, Internet, Apps, Marken, Alltag heute): Such die ueberraschendsten Fakten raus,
+  die kaum einer kennt (Ursprung, verrueckte Anfaenge, krasse Zahlen, kuriose Details, "Was, echt?!").
+  Nichts, was jeder schon weiss. Keine Werbung fuer Firmen, neutral bleiben.{WUNSCH_HINWEIS}
 - Kurze, lebendige Saetze, Du-Ansprache, locker aber nicht cringe (keine Jugendwoerter erzwingen). Keine Emojis, keine Klammern,
   keine Abkuerzungen, keine Sonderzeichen. Der Text wird von einer Computerstimme vorgelesen.
 - 8 bis 12 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
@@ -557,7 +649,8 @@ Antworte NUR mit JSON:
   "szenen": [{{"text": "...", "bilder": [0], "suchbegriff_en": "... oder null"}}],
   "behauptungen": [{{"aussage": "...", "beleg": "woertliches Zitat aus dem Artikel"}}],
   "beschreibung": "2-3 Saetze, erzaehlt neugierig weiter, endet mit Aufforderung zum Folgen",
-  "hashtags": ["#fakten", "#wusstestdu", "..."],
+  "hashtags": ["#fakten", "#unnützeswissen", "..."],
+  "hook_stil": "Name des gewaehlten Hook-Stils",
   "musik_stimmung": "eins von: spannend, mysterioes, dramatisch, froehlich, episch, historisch, kurios, ruhig",
   "suchbegriff_thema": "englischer Stock-Video-Suchbegriff fuer das Thema allgemein (2-3 Woerter)",
   "hook_text": "Texteinblendung fuer die ersten Sekunden: max. 6 Woerter, der krasseste Fakt, wahr laut Artikel",
@@ -697,7 +790,7 @@ def faktencheck(daten):
     prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit dem ARTIKEL.
 Jede FAKTENAUSSAGE im Sprechtext muss durch den Artikel gedeckt sein.
 schwere "faktisch" = erfundene oder falsche Fakten, falsche Zahlen/Daten/Namen, verdrehte Zusammenhaenge.
-schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, "Wusstest du", Spannungsaufbau,
+schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, Hook-Saetze, Spannungsaufbau,
 einfache Erklaerungen von Begriffen und veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen),
 sowie harmlose Vereinfachungen, die nichts Falsches behaupten (z. B. nur das Startjahr nennen, "Koenige" statt
 "Monarchen", eine Zeitspanne grob zusammenfassen).
@@ -732,7 +825,7 @@ def reparieren(daten, ergebnis):
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
-Der erste Satz beginnt weiter mit "Wusstest du". Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 120. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
+Der Einstieg muss weiterhin sofort neugierig machen. Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 120. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
@@ -1576,7 +1669,7 @@ def telegram_senden(video, daten, check, dauer, knoepfe=None, kopfzeile=""):
     pruef = "\n".join(f"{'✅' if p.get('beleg_im_text') else '⚠️'} {p.get('behauptung')}"
                       for p in check.get("pruefung", []))
     text = (kopfzeile + f"📌 TITEL\n{daten['titel']}\n\n"
-            f"🪝 HOOK-TEXT\n{daten.get('hook_text', '–')}\n\n"
+            f"🪝 EINSTIEG ({daten.get('hook_stil', '?')})\n„{daten['szenen'][0]['text']}“\nEinblendung: {daten.get('hook_text', '–')}\n\n"
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
             f"Quelle: {daten['quellen'][0]}\n"
             + (("Bilder: " + "; ".join(daten.get("bildnachweise", [])) + "\n") if daten.get("bildnachweise") else "")
@@ -1788,9 +1881,17 @@ def instagram_hochladen(video, daten):
         if r.status_code != 200:
             raise RuntimeError(f"Instagram-Veroeffentlichung fehlgeschlagen: {r.status_code} {r.text[:400]}")
         media = r.json()["id"]
+        if daten.get("kommentar_frage"):
+            try:                                   # erster Kommentar = Frage -> mehr Kommentare
+                k = requests.post(f"{IG_API}/{media}/comments", timeout=30,
+                                  data={"message": f"💬 {daten['kommentar_frage']}", "access_token": IG_TOKEN})
+                log("Instagram: Kommentar-Frage gepostet" if k.status_code == 200 else f"Kommentar nicht moeglich: {k.text[:150]}")
+            except requests.RequestException:
+                pass
         link = requests.get(f"{IG_API}/{media}", timeout=30,
                             params={"fields": "permalink", "access_token": IG_TOKEN}).json().get("permalink", "")
         log(f"Instagram-Upload ok: {link or media}")
+        daten["_ig_media_id"] = media
         return link or media
     raise RuntimeError("Instagram-Upload fehlgeschlagen: " + " | ".join(fehler))
 
@@ -1811,9 +1912,6 @@ def erstelle_video():
             titel = thema_waehlen(benutzt)
             benutzt.add(titel)
             kandidat = skript_erstellen(titel)
-            erste = kandidat["szenen"][0]["text"]
-            if not erste.lower().startswith("wusstest du"):
-                kandidat["szenen"][0]["text"] = "Wusstest du schon? " + erste
             log(f"Skript fertig: {kandidat['titel']} – pruefe Fakten ...")
             ok, ergebnis = faktencheck(kandidat)
             for runde in range(1, 4):
@@ -1840,6 +1938,8 @@ def erstelle_video():
     meta.update(faktencheck=check, dauer=round(dauer, 1))
     (OUT / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     speichere_thema(daten["thema"])
+    if daten.get("hook_stil"):
+        hook_merken(str(daten["hook_stil"])[:30])
     return video, daten, check, dauer
 
 
@@ -2001,7 +2101,7 @@ def modus_erstellen():
     msg = telegram_senden(video, daten, check, dauer, knoepfe=knoepfe_fuer(slot, extra), kopfzeile=kopf)
     st = status_laden()                           # neu laden (koennte sich geaendert haben)
     st["slots"][slot] = {"status": "wartet", "run_id": os.environ.get("GITHUB_RUN_ID", ""),
-                         "message_id": msg, "titel": daten["titel"], "extra": extra,
+                         "message_id": msg, "titel": daten["titel"], "thema": daten.get("thema", ""), "extra": extra,
                          "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat()}
     status_speichern(st)
     log(f"FERTIG: Video fuer {slot} wartet auf Freigabe")
@@ -2023,11 +2123,11 @@ def _artefakt_laden(run_id):
     return ziel / "faktenfieber.mp4", json.loads((ziel / "meta.json").read_text(encoding="utf-8"))
 
 
-def _neu_starten(slot):
-    """Startet den Erstell-Workflow fuer diesen Slot nochmal (nach 'Neu machen')."""
+def _neu_starten(slot, thema=""):
+    """Startet den Erstell-Workflow (nach 'Neu machen' fuer denselben Termin, oder mit Thema fuer Teil 2)."""
     r = requests.post(f"https://api.github.com/repos/{GH_REPO}/actions/workflows/erstellen.yml/dispatches",
                       headers={"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"},
-                      json={"ref": "main", "inputs": {"slot": slot}}, timeout=30)
+                      json={"ref": "main", "inputs": {"slot": slot, "thema": thema}}, timeout=30)
     return r.status_code == 204
 
 
@@ -2039,13 +2139,13 @@ def modus_pruefen():
 
     # 0) Befehle vom Tuersteher
     befehl = os.environ.get("AKTION", "")
-    if befehl in ("pause", "weiter", "status", "schwierigkeit"):
+    if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht"):
         befehl_ausfuehren(st, befehl)
         status_speichern(st)
         if befehl == "status":
             return
     # 1) Knopfdruecke: sofort vom Telegram-Tuersteher (Cloudflare) weitergereicht, sonst selbst abholen
-    if befehl in ("ok", "neu", "jetzt") and os.environ.get("AKTION_SLOT"):
+    if befehl in ("ok", "neu", "jetzt", "teil2") and os.environ.get("AKTION_SLOT"):
         aktion_verarbeiten(st, os.environ["AKTION"], os.environ["AKTION_SLOT"], vom_tuersteher=True)
     upd = tg("getUpdates", offset=st.get("tg_offset", 0), timeout=0, allowed_updates=json.dumps(["callback_query"]))
     for u in upd.get("result", []) if upd.get("ok") else []:
@@ -2065,7 +2165,11 @@ def modus_pruefen():
                 ergebnis = veroeffentlichen(video, meta, einzeln=False)
                 eintrag["status"] = "gepostet"
                 eintrag["links"] = ergebnis
+                eintrag["ig_media_id"] = meta.get("_ig_media_id")
+                eintrag["gepostet_um"] = jetzt().isoformat()
+                eintrag["_slot"] = slot
                 posting_melden(eintrag, meta, ergebnis)
+                eintrag.pop("_slot", None)
                 log(f"{slot}: gepostet {ergebnis}")
             except Exception as e:
                 eintrag["fehler"] = eintrag.get("fehler", 0) + 1
@@ -2129,11 +2233,51 @@ def posting_melden(eintrag, meta, ergebnis):
     tg("sendMessage", chat_id=TG_CHAT, text=f"{kopf}\n„{meta.get('titel', '')}“\n\n" + "\n\n".join(zeilen),
        reply_to_message_id=eintrag.get("message_id") or "", disable_web_page_preview="true")
     knopf = f"🎉 Gepostet um {um} Uhr" if alles_ok else f"⚠️ Gepostet um {um} Uhr (mit Fehlern)"
+    reihen = [[{"text": knopf, "callback_data": "x"}]]
+    slot = next((k for k, v in status_laden().get("slots", {}).items() if v is eintrag), None) or eintrag.get("_slot")
+    if slot:
+        reihen.append([{"text": "🔁 Teil 2 zu diesem Thema bauen", "callback_data": f"teil2|{slot}"}])
     tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
-       reply_markup=json.dumps({"inline_keyboard": [[{"text": knopf, "callback_data": "x"}]]}))
+       reply_markup=json.dumps({"inline_keyboard": reihen}))
+
+
+def statistik_senden(st, wochenbericht=False):
+    """Likes + Kommentare (und wenn erlaubt: Aufrufe) der geposteten Instagram-Reels."""
+    posts = [(k, v) for k, v in st.get("slots", {}).items() if v.get("status") == "gepostet" and v.get("ig_media_id")]
+    if not posts:
+        telegram_text("📈 Noch keine Instagram-Posts mit Statistik (zaehlt ab jetzt mit).")
+        return
+    zeilen, werte = [], []
+    for slot, e in sorted(posts)[-14:]:
+        mid = e["ig_media_id"]
+        try:
+            d = requests.get(f"{IG_API}/{mid}", timeout=30, params={
+                "fields": "like_count,comments_count", "access_token": IG_TOKEN}).json()
+        except requests.RequestException:
+            d = {}
+        aufrufe = None
+        try:
+            ins = requests.get(f"{IG_API}/{mid}/insights", timeout=30, params={
+                "metric": "views", "access_token": IG_TOKEN}).json()
+            aufrufe = ins["data"][0]["values"][0]["value"]
+        except Exception:
+            pass
+        likes, komm = d.get("like_count", 0) or 0, d.get("comments_count", 0) or 0
+        werte.append((likes + 3 * komm + (aufrufe or 0) / 50, e.get("titel", slot), likes, komm, aufrufe))
+        zeilen.append(f"{slot[5:]}  ❤️ {likes}  💬 {komm}" + (f"  👀 {aufrufe}" if aufrufe is not None else "")
+                      + f"\n   „{e.get('titel', '')[:45]}“")
+    bestes = max(werte)
+    text = (("📈 WOCHENBERICHT\n\n" if wochenbericht else "📈 STATISTIK (Instagram)\n\n") + "\n\n".join(zeilen)
+            + f"\n\n🏆 Bestes Video: „{bestes[1][:50]}“ (❤️ {bestes[2]}, 💬 {bestes[3]})"
+            + ("\n\nℹ️ Aufrufe werden nur angezeigt, wenn die App die Berechtigung "
+               "instagram_business_manage_insights hat." if all(w[4] is None for w in werte) else ""))
+    telegram_text(text)
 
 
 def befehl_ausfuehren(st, befehl):
+    if befehl in ("stats", "wochenbericht"):
+        statistik_senden(st, wochenbericht=befehl == "wochenbericht")
+        return
     if befehl == "schwierigkeit":
         roh = os.environ.get("AKTION_SLOT", "").replace(",", ".").strip()
         aktuell = st.get("max_schwierigkeit", MAX_SCHWIERIGKEIT)
@@ -2183,6 +2327,15 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
     """✅ / ❌ fuer einen Termin umsetzen."""
     antwort = (lambda text: tg("answerCallbackQuery", callback_query_id=cb_id, text=text)) if cb_id else (lambda text: None)
     eintrag = st["slots"].get(slot)
+    if aktion == "teil2":
+        eintrag = st["slots"].get(slot) or {}
+        thema = eintrag.get("thema") or eintrag.get("titel", "")
+        if thema and _neu_starten("sofort", f"{thema} TEIL2"):
+            if not vom_tuersteher:
+                telegram_text(f"🔁 Baue Teil 2 zu „{thema}“ mit neuen Fakten. Kommt in ca. 10–15 Minuten.")
+        else:
+            telegram_text("⚠️ Konnte Teil 2 nicht starten.")
+        return
     darf = ("wartet", "freigegeben", "fehler") if aktion == "jetzt" else ("wartet",)
     if not eintrag or eintrag.get("status") not in darf:
         antwort("Schon erledigt 👍")
@@ -2271,7 +2424,7 @@ if __name__ == "__main__":
     try:
         modus = sys.argv[1] if len(sys.argv) > 1 else "test"
         {"test": main, "erstellen": modus_erstellen, "pruefen": modus_pruefen, "noetig": modus_noetig,
-         "status": lambda: befehl_ausfuehren(status_laden(), "status")}[modus]()
+         "status": lambda: befehl_ausfuehren(status_laden(), os.environ.get("AKTION") or "status")}[modus]()
     except SystemExit as e:
         if e.code not in (0, None):
             telegram_text(f"❌ Faktenfieber: Kein Video erstellt.\n{e.code}")
