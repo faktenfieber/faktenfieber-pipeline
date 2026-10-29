@@ -319,6 +319,107 @@ def wiki_artikel(titel):
     return seite["title"], text[:7000], seite.get("fullurl", f"https://de.wikipedia.org/wiki/{titel}")
 
 
+EN_API = "https://en.wikipedia.org/w/api.php"
+WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+# Wikidata-Eigenschaften, die fuer Shorts interessant sind (exakte Zahlen + Daten)
+WD_EIGENSCHAFTEN = {
+    "P571": "Gegründet/entstanden", "P580": "Beginn", "P582": "Ende", "P585": "Zeitpunkt", "P569": "Geboren",
+    "P570": "Gestorben", "P575": "Entdeckt/erfunden", "P577": "Veröffentlicht", "P1619": "Eröffnet",
+    "P17": "Land", "P131": "Ort", "P276": "Ort", "P61": "Entdecker/Erfinder", "P170": "Urheber", "P112": "Gründer",
+    "P2048": "Höhe", "P2043": "Länge", "P2049": "Breite", "P2046": "Fläche", "P2067": "Masse", "P2044": "Höhe über Meer",
+    "P1082": "Einwohner", "P1128": "Mitarbeiter", "P1120": "Todesopfer", "P1339": "Verletzte", "P2052": "Geschwindigkeit",
+    "P2130": "Kosten", "P2142": "Einspielergebnis", "P1174": "Besucher pro Jahr", "P2047": "Dauer",
+}
+TEXT_BUDGET = 9500                    # Zeichen fuer alle Quellen zusammen (sonst werden KI-Anfragen zu gross)
+
+
+def _wd_wert(dv, labels):
+    typ, w = dv.get("type"), dv.get("value")
+    if typ == "time":
+        t = w["time"].lstrip("+")
+        jahr = t[:t.index("-", 1)] if t.startswith("-") else t[:4]
+        if t.startswith("-"):
+            return f"{jahr[1:].lstrip('0')} v. Chr."
+        return jahr.lstrip("0") if w.get("precision", 11) <= 9 else f"{t[8:10]}.{t[5:7]}.{jahr}"
+    if typ == "quantity":
+        zahl = w["amount"].lstrip("+")
+        einheit = w.get("unit", "1").rsplit("/", 1)[-1]
+        return f"{zahl} {labels.get(einheit, '')}".strip()
+    if typ == "wikibase-entityid":
+        return labels.get(w.get("id"), "")
+    if typ in ("string", "monolingualtext"):
+        return w if isinstance(w, str) else w.get("text", "")
+    return ""
+
+
+def wikidata_fakten(qid):
+    """Exakte Eckdaten (Jahreszahlen, Groessen, Opferzahlen ...) aus Wikidata als kurze Liste."""
+    try:
+        e = requests.get(WIKIDATA_API, headers=WIKI_HEADERS, timeout=30, params={
+            "action": "wbgetentities", "ids": qid, "props": "claims", "format": "json"}).json()["entities"][qid]
+        werte, brauche = [], set()
+        for prop, name in WD_EIGENSCHAFTEN.items():
+            for c in (e.get("claims", {}).get(prop) or [])[:2]:
+                dv = (c.get("mainsnak") or {}).get("datavalue")
+                if not dv:
+                    continue
+                werte.append((name, dv))
+                if dv["type"] == "wikibase-entityid":
+                    brauche.add(dv["value"]["id"])
+                elif dv["type"] == "quantity" and "/entity/" in dv["value"].get("unit", ""):
+                    brauche.add(dv["value"]["unit"].rsplit("/", 1)[-1])
+        labels = {}
+        if brauche:
+            l = requests.get(WIKIDATA_API, headers=WIKI_HEADERS, timeout=30, params={
+                "action": "wbgetentities", "ids": "|".join(list(brauche)[:50]), "props": "labels",
+                "languages": "de|en", "format": "json"}).json().get("entities", {})
+            labels = {k: (v.get("labels", {}).get("de") or v.get("labels", {}).get("en") or {}).get("value", "")
+                      for k, v in l.items()}
+        zeilen = [f"- {name}: {_wd_wert(dv, labels)}" for name, dv in werte]
+        return "\n".join(z for z in zeilen if not z.endswith(": "))[:900]
+    except Exception as ex:
+        log(f"Wikidata nicht ladbar: {ex}")
+        return ""
+
+
+def englischer_artikel(titel_de):
+    """Der passende englische Artikel (oft 3-5x ausfuehrlicher) + Wikidata-ID."""
+    try:
+        d = wiki(prop="langlinks|pageprops", titles=titel_de, lllang="en", ppprop="wikibase_item", redirects=1)
+        seite = d["query"]["pages"][0]
+        qid = (seite.get("pageprops") or {}).get("wikibase_item", "")
+        en = (seite.get("langlinks") or [{}])[0].get("title")
+        if not en:
+            return "", "", "", qid
+        r = requests.get(EN_API, headers=WIKI_HEADERS, timeout=30, params={
+            "action": "query", "format": "json", "formatversion": 2, "prop": "extracts|info", "explaintext": 1,
+            "inprop": "url", "titles": en, "redirects": 1}).json()
+        s_en = r["query"]["pages"][0]
+        text = re.sub(r"\n{2,}", "\n", s_en.get("extract", ""))
+        text = re.split(r"\n=+ (See also|References|Notes|Further reading|External links|Bibliography) =+", text)[0]
+        return s_en.get("title", en), text, s_en.get("fullurl", f"https://en.wikipedia.org/wiki/{en}"), qid
+    except Exception as ex:
+        log(f"Englischer Artikel nicht ladbar: {ex}")
+        return "", "", "", ""
+
+
+def quellen_sammeln(titel):
+    """Deutsche Wikipedia + englische Wikipedia + Wikidata zu einem Recherche-Text zusammenfuehren."""
+    titel, de, url = wiki_artikel(titel)
+    en_titel, en, en_url, qid = englischer_artikel(titel)
+    wd = wikidata_fakten(qid) if qid else ""
+    de = de[:6500]
+    en = en[:max(2500, TEXT_BUDGET - len(de) - len(wd))]
+    teile = [f"=== DEUTSCHER WIKIPEDIA-ARTIKEL ===\n{de}"]
+    if en:
+        teile.append(f"=== ENGLISCHER WIKIPEDIA-ARTIKEL \"{en_titel}\" ===\n{en}")
+    if wd:
+        teile.append(f"=== WIKIDATA (exakte Eckdaten) ===\n{wd}")
+    quellen = [f"Wikipedia – {titel}: {url}"] + ([f"Wikipedia (en) – {en_titel}: {en_url}"] if en else [])
+    log(f"Quellen: DE {len(de)} Zeichen, EN {len(en)} Zeichen, Wikidata {len(wd.splitlines()) if wd else 0} Eckdaten")
+    return titel, "\n\n".join(teile), quellen
+
+
 FREIE_LIZENZEN = ("cc0", "cc by", "cc-by", "public domain", "pd", "gemeinfrei", "no restrictions")
 BILD_AUSSCHLUSS = re.compile(r"(icon|logo|flag|flagge|wappen|coat.of.arms|karte|map|locator|symbol|signatur|"
                              r"signature|unterschrift|commons-logo|wiktionary|wikidata|disambig|stub|pictogram|"
@@ -662,7 +763,7 @@ def skript_erstellen(titel):
     if profil:
         HOOK_ZULETZT += "\n  " + profil.replace("\n", "\n  ")
     HOOK_STILE_TEXT = "\n".join(f"  * {k}: {v}" for k, v in HOOK_STILE.items())
-    titel, artikel, url = wiki_artikel(titel)
+    titel, artikel, quellen = quellen_sammeln(titel)
     WUNSCH_HINWEIS = (f"\n- WUNSCH DES KANALBETREIBERS: Das Video soll um \"{WUNSCH_THEMA}\" gehen. Bleib genau bei "
                       f"diesem Thema, auch wenn der Artikel breiter ist.") if WUNSCH_THEMA else ""
     if TEIL2:
@@ -672,12 +773,17 @@ def skript_erstellen(titel):
     bilder = wiki_bilder(titel)
     bildliste = "\n".join(f"{i}: {b.get('beschreibung') or b.get('datei', '')}" for i, b in enumerate(bilder)) or "(keine Bilder vorhanden)"
     prompt = f"""Du bist Autor des deutschen Faceless-Kanals FAKTENFIEBER (YouTube Shorts + Instagram Reels).
-Schreibe ein Short ueber den folgenden Wikipedia-Artikel.
+Schreibe ein Short ueber "{titel}". Du hast drei Quellen: den deutschen und (falls vorhanden) den englischen
+Wikipedia-Artikel sowie exakte Eckdaten aus Wikidata.
 
-ABSOLUTE REGEL: Verwende NUR Fakten, die WOERTLICH so im Artikeltext stehen. Nichts dazuerfinden,
+ABSOLUTE REGEL: Verwende NUR Fakten, die so in diesen Quellen stehen. Nichts dazuerfinden,
 nichts aus deinem eigenen Wissen ergaenzen, nicht uebertreiben, keine Zahlen runden oder aendern.
+- Der englische Artikel ist oft ausfuehrlicher: Nutze ihn fuer spannende Details, die im deutschen fehlen,
+  und uebersetze sie sauber ins Deutsche.
+- Widersprechen sich die Quellen bei einer Zahl, einem Datum oder Namen, lass sie weg oder formuliere vorsichtig
+  ("etwa", "ueber"), aber nur, wenn das durch BEIDE Quellen gedeckt ist.
 
-ARTIKEL "{titel}":
+QUELLEN:
 \"\"\"{artikel}\"\"\"
 
 ECHTE BILDER ZUM THEMA (Nummer: Beschreibung):
@@ -740,7 +846,8 @@ STIL:
             zeigen kann, was im Satz passiert, inkl. Epoche/Ort (z. B. "medieval town street", "1930s steam train",
             "octopus swimming"). Wenn kein Stock-Video wirklich passt: null.
 - Jede Faktenbehauptung einzeln auflisten, mit "beleg" = exaktes, woertliches Zitat (5-25 Woerter)
-  aus dem Artikeltext, das die Behauptung belegt. Copy-Paste, kein Umformulieren!
+  aus einer der Quellen, das die Behauptung belegt. Copy-Paste in der ORIGINALSPRACHE (englische Zitate bleiben
+  englisch, Wikidata-Zeilen genau so wie oben), kein Umformulieren, nicht uebersetzen!
 - Titel, Beschreibung und Hashtags fuer YouTube/Instagram selbst erstellen.
 
 Antworte NUR mit JSON:
@@ -762,7 +869,7 @@ Antworte NUR mit JSON:
     daten["_modell"] = modell
     felder_auffuellen(daten)
     daten["_artikel"] = artikel
-    daten["quellen"] = [f"Wikipedia – {titel}: {url}"]
+    daten["quellen"] = quellen
     daten["_bilder"] = bilder
     daten["_quelle"] = ((_KANDIDATEN or {}).get(titel) or {}).get("quelle", "wunsch" if WUNSCH_THEMA else "")
     if SERIE and daten["_quelle"] == "serie":
@@ -864,10 +971,10 @@ def _norm(t):
 def beleg_gefunden(beleg, artikel):
     """Programmatischer Check: steht das Zitat wirklich im Artikel? (kleine Abweichungen ok)"""
     b, a = _norm(beleg), _norm(artikel)
+    if len(b) >= 10 and b in a:              # auch kurze, exakte Wikidata-Zeilen ("Todesopfer: 9")
+        return True
     if len(b) < 15:
         return False
-    if b in a:
-        return True
     m = difflib.SequenceMatcher(None, a, b, autojunk=False).find_longest_match(0, len(a), 0, len(b))
     return m.size >= 0.85 * len(b)
 
@@ -954,7 +1061,7 @@ def faktencheck(daten):
     if not alle_ok:
         fehlend = [f"Zitat steht nicht im Artikel (Aussage: '{b.get('aussage', '')}', angebliches Zitat: '{b.get('beleg', '')}')"
                    for b in daten.get("behauptungen", []) if not beleg_gefunden(b.get("beleg", ""), artikel)]
-        log(f"Stufe 1: {len(fehlend)} Zitat(e) stehen NICHT im Artikel.")
+        log(f"Stufe 1: {len(fehlend)} Zitat(e) stehen NICHT in den Quellen.")
         return False, {"pruefung": pruefung, "gesamt": "nicht_ok", "probleme": fehlend or ["Keine Behauptungen angegeben"]}
 
     # Stufe 2: Eine (moeglichst andere) KI vergleicht den Sprechtext mit dem Artikel
@@ -962,17 +1069,21 @@ def faktencheck(daten):
     if daten.get("hook_text"):
         sprechtext = f"[Texteinblendung: {daten['hook_text']}] " + sprechtext
     autor = daten["_modell"]
-    prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit dem ARTIKEL.
-Jede FAKTENAUSSAGE im Sprechtext muss durch den Artikel gedeckt sein.
+    prompt = f"""Du bist strenger Faktenpruefer. Vergleiche den SPRECHTEXT eines Videos mit den QUELLEN
+(deutscher + ggf. englischer Wikipedia-Artikel + Wikidata-Eckdaten).
+Jede FAKTENAUSSAGE im Sprechtext muss durch mindestens eine Quelle gedeckt sein.
+DOPPEL-CHECK: Widersprechen sich die Quellen bei einer Zahl, einem Datum oder Namen und der Sprechtext nennt
+eine davon als sicher -> "faktisch" mit dem Hinweis "Quellen widersprechen sich: weglassen oder vorsichtig formulieren".
 schwere "faktisch" = erfundene oder falsche Fakten, falsche Zahlen/Daten/Namen, verdrehte Zusammenhaenge.
 schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, Hook-Saetze, Spannungsaufbau,
 einfache Erklaerungen von Begriffen und veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen),
 sowie harmlose Vereinfachungen, die nichts Falsches behaupten (z. B. nur das Startjahr nennen, "Koenige" statt
 "Monarchen", eine Zeitspanne grob zusammenfassen).
-"faktisch" NUR, wenn eine Aussage dem Artikel widerspricht oder etwas behauptet, das dort nicht steht.
+"faktisch" NUR, wenn eine Aussage den Quellen widerspricht oder etwas behauptet, das dort nicht steht.
+Sauber uebersetzte Fakten aus dem englischen Artikel sind korrekt.
 Melde nur echte Probleme, keine Kleinigkeiten.
 
-ARTIKEL:
+QUELLEN:
 \"\"\"{artikel}\"\"\"
 
 SPRECHTEXT:
@@ -999,13 +1110,13 @@ def reparieren(daten, ergebnis):
     entwurf = {k: daten[k] for k in ("titel", "szenen", "behauptungen", "beschreibung", "hashtags") if k in daten}
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
-Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
+Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus den Quellen (Copy-Paste in Originalsprache).
 Erster und letzter Satz nur aendern, wenn sie selbst fehlerhaft sind (sie wurden extra fuer Catch und Loop optimiert). Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 120. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
 
-ARTIKEL:
+QUELLEN:
 \"\"\"{daten['_artikel']}\"\"\"
 
 AKTUELLES SKRIPT (JSON):
@@ -2206,7 +2317,9 @@ def nachweise_merken(daten):
     liste = _lade_json(NACHWEIS_DATEI) or []
     liste = [e for e in liste if e.get("titel") != daten.get("titel")]
     liste.append({"datum": jetzt().strftime("%d.%m.%Y"), "titel": daten.get("titel", ""),
-                  "artikel": (daten.get("quellen") or [""])[0], "bilder": daten.get("bildnachweise", []),
+                  "artikel": (daten.get("quellen") or [""])[0].rsplit(": ", 1)[-1],
+                  "weitere": [q.rsplit(": ", 1)[-1] for q in (daten.get("quellen") or [])[1:]],
+                  "bilder": daten.get("bildnachweise", []),
                   "musik": daten.get("musiknachweis", "")})
     NACHWEIS_DATEI.parent.mkdir(parents=True, exist_ok=True)
     NACHWEIS_DATEI.write_text(json.dumps(liste[-300:], ensure_ascii=False, indent=1), encoding="utf-8")
@@ -2218,7 +2331,9 @@ def quellen_html():
     for e in reversed(_lade_json(NACHWEIS_DATEI) or []):
         bilder = "".join(f"<li>{_h.escape(b)}</li>" for b in e.get("bilder", []))
         eintraege += (f"<section><h2>{_h.escape(e['titel'])}</h2><p class=m>{_h.escape(e['datum'])} · "
-                      f"Text: <a href=\"{_h.escape(e['artikel'])}\">Wikipedia</a> (CC BY-SA 4.0)</p>"
+                      f"Text: <a href=\"{_h.escape(e['artikel'])}\">Wikipedia</a>"
+                      + "".join(f" · <a href=\"{_h.escape(w)}\">Wikipedia (en)</a>" for w in e.get("weitere", []))
+                      + " (CC BY-SA 4.0) · Eckdaten: Wikidata (CC0)</p>"
                       + (f"<ul>{bilder}</ul>" if bilder else "")
                       + (f"<p>🎵 {_h.escape(e['musik'])}</p>" if e.get("musik") else "") + "</section>")
     return f"""<!doctype html><html lang=de><head><meta charset=utf-8>
@@ -2227,7 +2342,7 @@ body{{margin:0;background:#0f0f12;color:#eee;font:15px/1.5 system-ui,sans-serif;
 h1{{color:#ffd400}}h2{{font-size:17px;margin:0 0 4px}}section{{background:#1a1a20;border-radius:12px;padding:14px;margin:10px 0}}
 .m{{color:#9a9aa5;font-size:13px;margin:0 0 6px}}a{{color:#ffd400}}ul{{margin:4px 0;padding-left:18px;font-size:14px}}
 </style></head><body><main><h1>🔥 Faktenfieber – Quellen & Bildnachweise</h1>
-<p class=m>Alle Fakten stammen aus Wikipedia. Bilder: Wikimedia Commons (freie Lizenzen) und Pixabay. Musik: freie Lizenzen.</p>
+<p class=m>Alle Fakten stammen aus Wikipedia (deutsch + englisch) und Wikidata. Bilder: Wikimedia Commons (freie Lizenzen) und Pixabay. Musik: freie Lizenzen.</p>
 {eintraege or '<p>Noch keine Videos.</p>'}</main></body></html>"""
 
 
