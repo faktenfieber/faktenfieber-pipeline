@@ -181,6 +181,17 @@
    },
    "ig_media_id": "18134254228671405",
    "gepostet_um": "2026-10-29T19:15:36.519765+01:00"
+  },
+  "2026-10-29 23:22": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "40965245394",
+   "message_id": 165,
+   "titel": "iPhone 12 kommt ohne Stromkabel",
+   "thema": "IPhone 12",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-29T23:27:11.341981+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
