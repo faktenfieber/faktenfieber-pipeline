@@ -136,13 +136,13 @@
    "erstellt": "2026-10-29T15:06:25.525319+01:00"
   },
   "2026-10-29 18:00": {
-   "status": "wartet",
+   "status": "verworfen",
    "run_id": "40892200663",
    "message_id": 127,
    "titel": "Wie ein Kreuzzug Konstantinopel zerstörte",
    "thema": "Vierter Kreuzzug",
    "extra": false,
-   "neu_gemacht": 0,
+   "neu_gemacht": 1,
    "erstellt": "2026-10-29T15:36:14.542889+01:00"
   }
  },
