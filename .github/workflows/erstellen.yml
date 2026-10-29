@@ -77,7 +77,8 @@ jobs:
           path: |
             output/faktenfieber.mp4
             output/meta.json
-          retention-days: 3
+            output/cover.jpg
+          retention-days: 8
           if-no-files-found: ignore
 
       - name: Status speichern
