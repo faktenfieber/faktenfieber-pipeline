@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v5.1
+FAKTENFIEBER – Pipeline v7.0
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -16,6 +16,7 @@ import subprocess
 import sys
 import time
 import wave
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -424,113 +425,193 @@ WUNSCH_THEMA = os.environ.get("WUNSCH_THEMA", "").strip()
 TEIL2 = WUNSCH_THEMA.endswith(" TEIL2")
 if TEIL2:
     WUNSCH_THEMA = WUNSCH_THEMA[:-6].strip()
-_WUNSCH_LISTE = None
 WUNSCH_HINWEIS = ""
 HOOK_STILE_TEXT = ""
 HOOK_ZULETZT = ""
-_WUNSCH_VERSUCHT = set()
+_VERSUCHT = set()                    # in diesem Lauf schon probierte Artikel
+_KANDIDATEN = None                   # Themen-Pool fuer diesen Lauf (wird einmal gebaut)
 
 
-def wunsch_kandidaten():
-    """Findet die Wikipedia-Artikel, die WIRKLICH ueber das Wunschthema sind.
-    Reihenfolge: exakter Artikel (auch ueber Umleitungen, z. B. Handy -> Mobiltelefon) -> normale Suche."""
-    global _WUNSCH_LISTE
-    if _WUNSCH_LISTE is not None:
-        return _WUNSCH_LISTE
-    titel = []
-    # a) exakter Titel / Umleitung
+# ================================================================ Themenfindung (viral statt 0815)
+VIRAL_KRITERIEN = """WAS VIRAL GEHT (fuer ein breites Publikum, Jugendliche UND Erwachsene, ohne Vorwissen):
+- Geheimnisse, Mysterien, ungeklaerte Faelle, Verschwoerungen, die WIRKLICH passiert sind
+- Krasse Geschichten: Katastrophen, Ueberlebende, Verbrechen, Heists, Fluchten, Betrueger, Spione
+- "Das glaubt mir keiner"-Fakten: verrueckte Zufaelle, absurde Regeln, irre Rekorde, gefaehrliche Experimente
+- Sachen, die JEDER kennt, aber keiner die Hintergruende: Marken, Apps, Handy, Internet, Games, Essen, Sport
+- Gruseliges, Ekliges, Lustiges, Gefaehrliches; Tiere und Natur, die unglaublich sind
+NICHT viral (0815): unbekannte Personen, Fernsehsendungen, Buerokratie, Politik, Religion, Kunst, Architektur,
+Adelsfamilien, Vereine, Doerfer, Firmen ohne Story, trockene Wissenschaft, alles mit vielen Namen und Jahreszahlen."""
+
+
+def artikel_finden(titel):
+    """Gibt den echten Wikipedia-Titel zurueck (auch ueber Umleitungen) oder None."""
     try:
-        daten = wiki(prop="info", titles=WUNSCH_THEMA, redirects=1)
-        seite = daten["query"]["pages"][0]
-        if not seite.get("missing") and "disambiguation" not in str(seite.get("pageprops", "")):
-            titel.append(seite["title"])
-    except Exception as e:
-        log(f"Wunsch-Titelsuche: {e}")
-    # b) Titel-Vorschlaege (wie die Suchleiste auf Wikipedia)
-    try:
+        seite = wiki(prop="info|pageprops", titles=titel, redirects=1)["query"]["pages"][0]
+        if not seite.get("missing") and "disambiguation" not in (seite.get("pageprops") or {}):
+            return seite["title"]
         r = requests.get(WIKI_API, headers=WIKI_HEADERS, timeout=30, params={
-            "action": "opensearch", "search": WUNSCH_THEMA, "limit": 6, "namespace": 0, "redirects": "resolve"})
-        titel += r.json()[1]
-    except Exception as e:
-        log(f"Wunsch-Vorschlaege: {e}")
-    # c) Volltextsuche
+            "action": "opensearch", "search": titel, "limit": 1, "namespace": 0, "redirects": "resolve"})
+        vorschlag = (r.json()[1] or [None])[0]
+        return vorschlag if vorschlag and "(Begriffsklärung)" not in vorschlag else None
+    except Exception:
+        return None
+
+
+def ideen_brainstorm(benutzt, wunsch="", anzahl=14):
+    """Die KI schlaegt konkrete, wirklich spannende Geschichten vor (mit echtem Wikipedia-Artikel)."""
+    zuletzt = ", ".join(list(benutzt)[-60:]) or "(keine)"
+    if wunsch:
+        auftrag = (f'Der Kanalbetreiber will ein Video zu: "{wunsch}".\n'
+                   f"Interpretiere das wie ein Mensch, nicht woertlich. Schlage {anzahl} KONKRETE, ECHTE Geschichten, "
+                   f"Ereignisse, Orte oder Dinge vor, die genau dazu passen und die Leute WIRKLICH fesseln. "
+                   f'Beispiel: "Russland groesstes Geheimnis" -> Djatlow-Pass-Vorfall, Kola-Bohrung, Tunguska-Ereignis, '
+                   f"Bernsteinzimmer, geheime Atomstaedte ... (nicht: irgendeine unbekannte Person).")
+    else:
+        auftrag = (f"Schlage {anzahl} KONKRETE, ECHTE Themen fuer die naechsten Videos vor, bunt gemischt: "
+                   f"ca. ein Drittel Geschichte und Mysterien, ein Drittel Dinge von HEUTE (Handy, Internet, Apps, "
+                   f"Games, Marken, Essen, Sport, Technik, Raumfahrt, menschlicher Koerper), ein Drittel Natur, Tiere, "
+                   f"Rekorde und krasse Ereignisse. Nichts, was jeder schon tausendmal gehoert hat.")
+    prompt = f"""Du bist Ideen-Chef eines deutschen Shorts-Kanals mit dem Ziel, viral zu gehen.
+{auftrag}
+
+{VIRAL_KRITERIEN}
+
+Jedes Thema muss einen eigenen DEUTSCHEN Wikipedia-Artikel haben; gib dessen exakten Titel an.
+Schon gemacht (nicht nochmal): {zuletzt}
+
+Antworte NUR mit JSON:
+{{"ideen": [{{"wikipedia_titel": "...", "hook": "der krasseste Fakt in einem Satz"}}]}}"""
     try:
-        daten = wiki(list="search", srsearch=WUNSCH_THEMA, srlimit=8, srnamespace=0)
-        titel += [t["title"] for t in daten.get("query", {}).get("search", [])]
+        antwort, _ = ki(prompt, temperatur=0.9)
     except Exception as e:
-        log(f"Wunsch-Volltextsuche: {e}")
-    titel = [t for t in dict.fromkeys(titel) if "(Begriffsklärung)" not in t and not t.startswith("Liste ")]
-    if len(titel) > 1:
-        # Die KI entscheidet, welcher Artikel am besten zum Wunsch passt
-        try:
-            intros = wiki(prop="extracts", exintro=1, explaintext=1, exlimit=20, titles="|".join(titel[:12]), redirects=1)
-            infos = {p["title"]: p.get("extract", "")[:250] for p in intros["query"]["pages"] if p.get("extract")}
-            liste = "\n\n".join(f"### {t}\n{infos[t]}" for t in titel if t in infos)
-            wahl, _ = ki(f"""Jemand will ein kurzes Fakten-Video ueber "{WUNSCH_THEMA}".
-Welche dieser Wikipedia-Artikel passen am besten (das Thema selbst, nicht nur am Rande)?
-Sortiere die 3 passendsten, bestes zuerst. Nimm bevorzugt den Hauptartikel zum Thema.
+        log(f"Ideen-Brainstorm nicht moeglich: {e}")
+        return {}
+    ideen = {}
+    for idee in antwort.get("ideen", [])[:anzahl + 4]:
+        titel = artikel_finden(str(idee.get("wikipedia_titel", "")).strip())
+        if titel and not schon_benutzt(titel, benutzt) and titel not in ideen:
+            ideen[titel] = str(idee.get("hook", ""))[:200]
+    log(f"Ideen ({'Wunsch: ' + wunsch if wunsch else 'frei'}): {len(ideen)} mit Wikipedia-Artikel")
+    return ideen
 
-{liste}
 
-Antworte NUR mit JSON: {{"titel": ["exakter Titel 1", "exakter Titel 2", "exakter Titel 3"]}}""", temperatur=0.1)
-            gewaehlt = [t for t in wahl.get("titel", []) if t in infos]
-            titel = gewaehlt + [t for t in titel if t not in gewaehlt and t in infos]
-        except Exception as e:
-            log(f"KI-Auswahl fuer Wunschthema nicht moeglich: {e}")
-    _WUNSCH_LISTE = titel
-    log(f"Wunschthema '{WUNSCH_THEMA}' -> Artikel: {titel[:5]}")
-    return _WUNSCH_LISTE
+TREND_AUSSCHLUSS = re.compile(r"^(Hauptseite|Spezial:|Wikipedia:|Datei:|Liste |Nekrolog|Deutschland$|Österreich$)")
+
+
+def trend_kandidaten(benutzt, anzahl=8):
+    """Was die Leute gerade WIRKLICH lesen: die meistgelesenen deutschen Wikipedia-Artikel von gestern."""
+    tag = (datetime.utcnow() - timedelta(days=1)).strftime("%Y/%m/%d")
+    try:
+        r = requests.get(f"https://wikimedia.org/api/rest_v1/metrics/pageviews/top/de.wikipedia/all-access/{tag}",
+                         headers=WIKI_HEADERS, timeout=30)
+        artikel = r.json()["items"][0]["articles"]
+    except Exception as e:
+        log(f"Trends nicht abrufbar: {e.__class__.__name__}")
+        return []
+    titel = [a["article"].replace("_", " ") for a in artikel[:80]]
+    titel = [t for t in titel if not TREND_AUSSCHLUSS.search(t) and not schon_benutzt(t, benutzt)]
+    log(f"Trends von gestern: {', '.join(titel[:10])} …")
+    return titel[:anzahl]
+
+
+IDEEN_DATEI = ROOT / "data" / "ideen.json"
+
+
+def ideen_laden():
+    try:
+        d = json.loads(IDEEN_DATEI.read_text(encoding="utf-8"))
+    except Exception:
+        d = {}
+    d.setdefault("warteschlange", [])          # deine Wunsch-Themen fuer die naechsten automatischen Videos
+    d.setdefault("backlog", {})                # von der KI vorgedachte Ideen (Titel -> Hook)
+    return d
+
+
+def ideen_speichern(d):
+    IDEEN_DATEI.parent.mkdir(parents=True, exist_ok=True)
+    d["backlog"] = dict(list(d["backlog"].items())[-60:])
+    IDEEN_DATEI.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def ideen_verbraucht(titel):
+    d = ideen_laden()
+    if d["backlog"].pop(titel, None) is not None:
+        ideen_speichern(d)
+
+
+def themen_pool(benutzt):
+    """Kandidaten aus 3 Quellen: KI-Ideen (konkret + spannend), aktuelle Trends, Zufall aus Wikipedia."""
+    global _KANDIDATEN
+    if _KANDIDATEN is not None:
+        return _KANDIDATEN
+    pool = {}
+    if WUNSCH_THEMA:
+        pool.update({t: ("ideen", h) for t, h in ideen_brainstorm(set() if TEIL2 else benutzt, WUNSCH_THEMA, 10).items()})
+        direkt = artikel_finden(WUNSCH_THEMA)
+        if direkt and direkt not in pool:
+            pool[direkt] = ("direkt", "")
+    else:
+        # Ideen-Speicher nutzen (spart KI-Anfragen), bei Bedarf auffuellen
+        d = ideen_laden()
+        backlog = {t: h for t, h in d["backlog"].items() if not schon_benutzt(t, benutzt)}
+        if len(backlog) < 10:
+            neu = ideen_brainstorm(set(benutzt) | set(backlog), anzahl=18)
+            backlog.update(neu)
+            d["backlog"] = backlog
+            ideen_speichern(d)
+        auswahl = list(backlog.items())
+        random.shuffle(auswahl)
+        pool.update({t: ("ideen", h) for t, h in auswahl[:14]})
+        for t in trend_kandidaten(benutzt):
+            pool.setdefault(t, ("trend", ""))
+        if len(pool) < 8:                         # Reserve, falls die KI-Ideen ausfallen
+            for t in wiki_kandidaten(benutzt, anzahl=8):
+                pool.setdefault(t, ("zufall", ""))
+    titel = list(pool)[:30]
+    try:
+        intros = {}
+        for i in range(0, len(titel), 20):
+            daten = wiki(prop="extracts", exintro=1, explaintext=1, exlimit=20, titles="|".join(titel[i:i + 20]),
+                         redirects=1)
+            intros.update({p["title"]: p.get("extract", "")[:260] for p in daten["query"]["pages"] if p.get("extract")})
+    except Exception as e:
+        log(f"Intros nicht ladbar: {e}")
+        intros = {t: "" for t in titel}
+    _KANDIDATEN = {t: {"quelle": pool[t][0], "hook": pool[t][1], "intro": intros.get(t, "")}
+                   for t in titel if t in intros}
+    return _KANDIDATEN
 
 
 def thema_waehlen(benutzt):
-    if WUNSCH_THEMA:
-        alle = wunsch_kandidaten()
-        liste = [t for t in alle if t not in benutzt and t not in _WUNSCH_VERSUCHT] or \
-                [t for t in alle if t not in _WUNSCH_VERSUCHT]
-        if liste:
-            _WUNSCH_VERSUCHT.add(liste[0])
-            log(f"Gewaehlt (Wunsch): {liste[0]}")
-            return liste[0]
-        log("Zum Wunschthema nichts (mehr) gefunden, nehme ein zufaelliges Thema.")
-    kandidaten = wiki_kandidaten(benutzt)
-    liste = "\n\n".join(f"### {t}\n{intro}" for t, intro in kandidaten.items())
-    prompt = f"""Du bist Redakteur des deutschen Shorts-Kanals FAKTENFIEBER (verrueckte, wahre Fakten und Geschichten).
-Hier sind Wikipedia-Artikel. Waehle den EINEN, aus dem sich das spannendste 45-Sekunden-Video
-fuer ein breites, junges Publikum machen laesst (ueberraschend, kurios, "das glaubt mir keiner").
-SCHWERPUNKT DES KANALS: bunt gemischtes "unnuetzes Wissen", das man sofort weitererzaehlen will:
-Geschichte und wie die Menschen frueher gelebt haben, ABER GENAUSO Dinge von heute (Handy, Internet,
-Apps, Games, Marken, Essen, Sport, Technik, der menschliche Koerper) sowie Natur und Tiere.
-Abwechslung ist wichtig: nicht immer nur Mittelalter.
-Bevorzuge ECHTE Ereignisse, Phaenomene, Orte, Erfindungen, Kriminalfaelle, Katastrophen, Kuriositaeten.
-Meiden: Romane, Filme, Alben, Fiktion, Verwaltung, Listen, Kirchen/Gebaeude ohne Story, Biografien ohne Twist.
-ZIELGRUPPE: breites Publikum ab ca. 15, vor allem junge Erwachsene, die durch Shorts scrollen.
-Nicht kindisch, aber man darf KEIN Vorwissen und KEIN Studium brauchen. Frag dich: Wuerde ein ganz normaler
-Mensch (ob 16 oder 40) stoppen und das danach Freunden erzaehlen? Gut sind Themen mit Gaensehaut-, Ekel-,
-"Was?!"- oder Lach-Faktor:
-Gruseliges, Krasses, Ekliges, Gefaehrliches, Rekorde, Verbrechen, Abenteuer, verrueckte Zufaelle,
-und wie hart/seltsam das Leben frueher war (z. B. fuer Kinder, in der Schule, beim Arzt, beim Essen).
-Bewerte ehrlich (1-10):
-"spannung": 9-10 nur, wenn ein konkreter Fakt wirklich verblueffend ist.
-"verstaendlich": Versteht jeder ohne Vorwissen das Thema sofort, ohne viel Erklaerung?
-"massentauglich": Wie sehr interessiert das ein breites Publikum (Jugendliche UND Erwachsene)?
-Waehle nur ein Thema mit verstaendlich >= 8 UND massentauglich >= 7. Im Zweifel das EINFACHERE Thema nehmen.
-TEST: Du musst das Thema in EINEM kurzen Satz so erklaeren koennen, dass es ein 12-Jaehriger versteht
-("Ein Schiff, das als unsinkbar galt, ist bei seiner ersten Fahrt gesunken."). Geht das nicht, ist das
-Thema zu schwer -> anderes nehmen.
-Meide komplett: Politik, Parteien, Religion/Theologie, Recht, Wirtschaft, Philosophie, Kunstgeschichte,
-Architektur, Sprachwissenschaft, Adelsfamilien und Stammbaeume, Verwaltung, abstrakte Wissenschaft
-(komplizierte Chemie, Physik, Mathematik), und alles mit vielen Namen und Jahreszahlen.
+    kandidaten = {t: v for t, v in themen_pool(benutzt).items() if t not in _VERSUCHT}
+    if not kandidaten:
+        raise RuntimeError("Keine Themen-Kandidaten mehr")
+    liste = "\n\n".join(f"### {t}  [{v['quelle']}]\n{v['hook'] + ' | ' if v['hook'] else ''}{v['intro']}"
+                        for t, v in kandidaten.items())
+    wunsch = (f'\nDER KANALBETREIBER WUENSCHT SICH DAS THEMA: "{WUNSCH_THEMA}". Nimm das Thema, das diesen Wunsch '
+              f"am besten trifft UND am spannendsten ist.\n") if WUNSCH_THEMA else ""
+    prompt = f"""Du bist Chefredakteur eines deutschen Shorts-Kanals, der in den naechsten Tagen viral gehen soll.
+Waehle aus diesen Wikipedia-Artikeln den EINEN, aus dem das fesselndste 50-Sekunden-Video wird.
+[ideen] = Vorschlag der Redaktion, [trend] = wird gerade von vielen gelesen, [zufall]/[direkt] = sonstige.
+{wunsch}
+{VIRAL_KRITERIEN}
+
+Frag dich ehrlich: Wuerde ein normaler Mensch beim Scrollen STOPPEN und das danach Freunden erzaehlen?
+Bewerte (1-10): "viral" (Stopp- und Weitererzaehl-Faktor), "verstaendlich" (ohne Vorwissen sofort klar).
+Nur ein Thema mit viral >= 8 und verstaendlich >= 8. Trends nur, wenn sich daraus eine echte Story machen laesst
+(keine reinen Promi- oder Nachrichtenmeldungen, keine Todesfaelle von Personen).
 
 {liste}
 
-Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "warum": "1 Satz", "einfach_erklaert": "der eine kurze Satz", "spannung": 1-10, "verstaendlich": 1-10, "massentauglich": 1-10}}"""
+Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "story": "die Story in einem kurzen Satz",
+"viral": 1-10, "verstaendlich": 1-10}}"""
     wahl, _ = ki(prompt, temperatur=0.4)
     titel = wahl.get("titel", "")
     if titel not in kandidaten:
-        titel = difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten)[:1]
-        titel = titel[0]
-    log(f"Gewaehlt: {titel} (Spannung {wahl.get('spannung')}, verstaendlich {wahl.get('verstaendlich')}, "
-        f"massentauglich {wahl.get('massentauglich')}) – {wahl.get('einfach_erklaert') or wahl.get('warum', '')}")
+        titel = (difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten))[0]
+    _VERSUCHT.add(titel)
+    log(f"Gewaehlt: {titel} [{kandidaten[titel]['quelle']}] (viral {wahl.get('viral')}, "
+        f"verstaendlich {wahl.get('verstaendlich')}) – {wahl.get('story', '')}")
     return titel
 
 
@@ -571,7 +652,7 @@ def skript_erstellen(titel):
                            "Blickwinkel als die offensichtlichsten. Der Titel enthaelt \"Teil 2\". Der Einstieg darf "
                            "kurz an Teil 1 anknuepfen (\"Im letzten Video ...\"), aber nur einen Satz lang.")
     bilder = wiki_bilder(titel)
-    bildliste = "\n".join(f"{i}: {b['beschreibung']}" for i, b in enumerate(bilder)) or "(keine Bilder vorhanden)"
+    bildliste = "\n".join(f"{i}: {b.get('beschreibung') or b.get('datei', '')}" for i, b in enumerate(bilder)) or "(keine Bilder vorhanden)"
     prompt = f"""Du bist Autor des deutschen Faceless-Kanals FAKTENFIEBER (YouTube Shorts + Instagram Reels).
 Schreibe ein Short ueber den folgenden Wikipedia-Artikel.
 
@@ -911,7 +992,7 @@ Antworte NUR mit dem korrigierten JSON im selben Format."""
 
 # ---------------------------------------------------------------- Voiceover
 # 1. Wahl: Gemini-TTS (natuerliche, betonte Stimme, gratis) – 2. Wahl: Piper (offline, robotischer)
-TTS_STIMME = os.environ.get("TTS_STIMME", "Fenrir")      # Gemini-Stimmen: Fenrir, Puck, Charon, Orus, Kore, Zephyr ...
+TTS_STIMME = os.environ.get("TTS_STIMME", "Charon")      # Gemini-Stimmen: Fenrir, Puck, Charon, Orus, Kore, Zephyr ...
 TTS_MODELLE = [m for m in (os.environ.get("TTS_MODEL", ""), "gemini-3.1-flash-tts-preview",
                            "gemini-2.5-flash-preview-tts") if m]
 TTS_STIL = os.environ.get("TTS_STIL", (
@@ -920,6 +1001,71 @@ TTS_STIL = os.environ.get("TTS_STIL", (
     "kurze Pausen nach jedem Satz und eine kleine Spannungspause vor der Pointe. "
     "Lies nur den Text vor, sonst nichts:"))
 STIMME_GENUTZT = "?"
+
+
+# Die besten Erzaehler-Stimmen (Gemini-TTS, gratis, sprechen sehr gut Deutsch). Name -> Beschreibung
+STIMMEN = {
+    "Charon":       "♂ ruhig, informativ – klassischer Doku-Erzähler",
+    "Orus":         "♂ tief, bestimmt – sehr seriös",
+    "Fenrir":       "♂ aufgeregt, energisch – viel Drive",
+    "Sadaltager":   "♂ wissend, souverän – wie ein Experte",
+    "Algenib":      "♂ rau, markant – Gänsehaut-Stimme",
+    "Puck":         "♂ locker, gut gelaunt – jung und frisch",
+    "Iapetus":      "♂ klar, deutlich – neutral",
+    "Achird":       "♂ freundlich, nahbar",
+    "Kore":         "♀ bestimmt, klar – stark für Fakten",
+    "Sulafat":      "♀ warm, angenehm – zum Zuhören",
+    "Aoede":        "♀ leicht, luftig – entspannt",
+    "Leda":         "♀ jugendlich, frisch",
+    "Zephyr":       "♀ hell, lebendig",
+    "Gacrux":       "♀ reif, erzählend – Hörbuch-Stil",
+    "Vindemiatrix": "♀ sanft, ruhig",
+}
+EMPFOHLEN = ["Charon", "Algenib", "Fenrir", "Kore"]      # fuer "/voice test" (Vergleich)
+ELEVEN_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+HOERPROBE = ("Neun Wanderer flohen mitten in der Nacht aus ihrem eigenen Zelt. Barfuß. Bei minus dreißig Grad. "
+             "Und bis heute weiß niemand so genau, warum.")
+
+
+def stimme_aus_status():
+    try:
+        return json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("stimme") or TTS_STIMME
+    except Exception:
+        return TTS_STIMME
+
+
+def elevenlabs_tts(text, ziel, voice_id):
+    """Optional (kostenpflichtig, aber noch natuerlicher): ElevenLabs. Braucht Secret ELEVENLABS_API_KEY."""
+    if not ELEVEN_KEY:
+        raise RuntimeError("ElevenLabs gewaehlt, aber kein ELEVENLABS_API_KEY")
+    r = requests.post(f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}", timeout=180,
+                      headers={"xi-api-key": ELEVEN_KEY, "Accept": "audio/mpeg"},
+                      json={"text": text, "model_id": "eleven_multilingual_v2",
+                            "voice_settings": {"stability": 0.45, "similarity_boost": 0.8, "style": 0.35}})
+    if r.status_code != 200:
+        raise RuntimeError(f"ElevenLabs: {r.status_code} {r.text[:200]}")
+    mp3 = Path(str(ziel) + ".mp3")
+    mp3.write_bytes(r.content)
+    ffmpeg("-i", mp3, "-ar", "24000", "-ac", "1", ziel)
+    return f"ElevenLabs/{voice_id}"
+
+
+def sprechen(text, ziel, stimme=None):
+    """Erzeugt die Sprachaufnahme mit der gewaehlten Stimme (mit Ersatzstimmen, falls etwas ausfaellt)."""
+    global TTS_STIMME
+    stimme = stimme or stimme_aus_status()
+    if stimme.startswith("eleven:"):
+        try:
+            return elevenlabs_tts(text, ziel, stimme.split(":", 1)[1])
+        except Exception as e:
+            log(f"⚠️ {e} -> nehme Gemini-Stimme")
+            stimme = "Charon"
+    TTS_STIMME = stimme
+    try:
+        return gemini_tts(text, ziel)
+    except Exception as e:
+        log(f"⚠️ {e} -> nehme Ersatzstimme Piper")
+        return piper_tts(text, ziel)
 
 
 def gemini_tts(text, ziel):
@@ -1088,6 +1234,7 @@ def schriftgroesse(text, basis):
 
 
 GELB = "&H0000E1FF&"
+WASSERZEICHEN = os.environ.get("WASSERZEICHEN", "@faktenfieber.official")
 WEISS = "&H00FFFFFF&"
 
 
@@ -1146,6 +1293,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             anim = r"\fscx82\fscy82\t(0,90,\fscx100\fscy100)" if k == 0 else ""
             zeilen.append(f"Dialogue: 0,{ass_zeit(start)},{ass_zeit(ende)},Main,,0,0,0,,"
                           f"{{\\an5\\pos(540,1180)\\fs{groesse}{anim}}}{text}")
+    if eintraege:                                 # dezentes Wasserzeichen (hilft, wenn Videos weitergeteilt werden)
+        ende = ass_zeit(max(e[2] for e in eintraege) + 1)
+        zeilen.append(f"Dialogue: 2,0:00:00.00,{ende},Main,,0,0,0,,"
+                      f"{{\\an2\\pos(540,1835)\\fs34\\bord2\\shad0\\alpha&H60&}}{WASSERZEICHEN}")
     Path(ziel).write_text(kopf + "\n".join(zeilen) + "\n", encoding="utf-8")
 
 
@@ -1540,8 +1691,18 @@ def ambient_erzeugen(ziel, dauer=90):
     return ziel
 
 
+def musik_lautstaerke_aktuell():
+    try:
+        return float(json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("musik_lautstaerke",
+                                                                                                MUSIK_LAUTSTAERKE))
+    except Exception:
+        return MUSIK_LAUTSTAERKE
+
+
 def audio_mischen(stimme, musik, gesamt, ziel):
     """Stimme + leise Musik, die unter der Stimme automatisch noch leiser wird (Ducking)."""
+    if musik_lautstaerke_aktuell() <= 0:
+        musik = None
     if not musik:
         ffmpeg("-i", stimme, "-af", f"apad=whole_dur={gesamt:.2f},loudnorm=I=-14:TP=-1.5:LRA=11",
                "-t", f"{gesamt:.2f}", "-ar", "44100", "-ac", "2", ziel)
@@ -1557,7 +1718,7 @@ def audio_mischen(stimme, musik, gesamt, ziel):
     filt = (f"[0:a]aformat=sample_rates=44100:channel_layouts=stereo,apad=whole_dur={gesamt:.2f},asplit=2[stimme][sc];"
             f"[1:a]aformat=sample_rates=44100:channel_layouts=stereo,atrim=0:{gesamt:.2f},asetpts=PTS-STARTPTS,"
             f"acompressor=threshold=0.1:ratio=3:attack=50:release=600,lowpass=f=6500,"   # Spitzen glaetten, weicher
-            f"volume={MUSIK_LAUTSTAERKE},afade=t=in:d=0.2,afade=t=out:st={max(0, gesamt - 0.4):.2f}:d=0.4[m];"
+            f"volume={musik_lautstaerke_aktuell()},afade=t=in:d=0.2,afade=t=out:st={max(0, gesamt - 0.4):.2f}:d=0.4[m];"
             f"[m][sc]sidechaincompress=threshold=0.04:ratio=5:attack=20:release=400[musik];"
             f"[stimme][musik]amix=inputs=2:normalize=0:duration=first,loudnorm=I=-14:TP=-1.5:LRA=11,"
             f"alimiter=limit=0.95[out]")
@@ -1578,11 +1739,7 @@ def video_bauen(daten):
 
     # 1) Voiceover (ein Stueck, damit die Betonung natuerlich durchlaeuft)
     roh = WORK / "voice_roh.wav"
-    try:
-        STIMME_GENUTZT = gemini_tts(volltext, roh)
-    except Exception as e:
-        log(f"⚠️ {e} -> nehme Ersatzstimme Piper")
-        STIMME_GENUTZT = piper_tts(volltext, roh)
+    STIMME_GENUTZT = sprechen(volltext, roh)
     gesamt = wav_dauer(roh)
     log(f"Voiceover ({STIMME_GENUTZT}): {gesamt:.1f} s")
 
@@ -1706,9 +1863,14 @@ def video_bauen(daten):
     # 5) Alles zusammen + Untertitel einbrennen (hochkant 1080x1920, 9:16)
     final = OUT / "faktenfieber.mp4"
     subs = str((WORK / "subs.ass").resolve()).replace(":", r"\:")
-    ffmpeg("-i", WORK / "bild.mp4", "-i", ton,
-           "-vf", f"ass='{subs}',setsar=1,setdar=9/16", "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-           "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-shortest",
+    # Fortschrittsbalken unten (zeigt, wie viel noch kommt -> Leute schauen eher bis zum Ende)
+    gesamt_d = max(ende_gesamt, 1)
+    filt = (f"[0:v]ass='{subs}'[v];"
+            f"[v][2:v]overlay=x='-w+w*t/{gesamt_d:.2f}':y=H-12:shortest=1,setsar=1,setdar=9/16[out]")
+    ffmpeg("-i", WORK / "bild.mp4", "-i", ton, "-f", "lavfi", "-i", f"color=c=0xFFE100:s={W}x8:r={FPS}",
+           "-filter_complex", filt, "-map", "[out]", "-map", "1:a",
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+           "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-t", f"{ende_gesamt:.2f}",
            "-movflags", "+faststart", final)
     return final, ende_gesamt
 
@@ -2005,6 +2167,7 @@ def erstelle_video():
     meta.update(faktencheck=check, dauer=round(dauer, 1))
     (OUT / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
     speichere_thema(daten["thema"])
+    ideen_verbraucht(daten["thema"])
     if daten.get("hook_stil"):
         hook_merken(str(daten["hook_stil"])[:30])
     return video, daten, check, dauer
@@ -2052,8 +2215,9 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ZEITZONE = ZoneInfo("Europe/Vienna")
-SLOTS = [(8, 0), (18, 0)]                        # Posting-Zeiten
-VERFALL_VOR_NAECHSTEM = timedelta(hours=2, minutes=30)   # Freigabe moeglich, bis das naechste Video gebaut wird
+SLOTS = [(8, 0), (12, 0), (18, 0)]               # Posting-Zeiten (bei Aenderung auch PLAN im Tuersteher anpassen!)
+VORLAUF = timedelta(hours=2, minutes=30)          # so frueh vor dem Termin wird das Video gebaut
+VERFALL_VOR_NAECHSTEM = timedelta(minutes=60)     # Freigabe moeglich bis 1 h vor dem naechsten Termin
 MAX_NEU = 3                                      # so oft darf pro Slot "Neu machen" gedrueckt werden
 STATUS_DATEI = ROOT / "data" / "status.json"
 GH_REPO = os.environ.get("GITHUB_REPOSITORY", "")
@@ -2065,8 +2229,8 @@ def jetzt():
 
 
 def verfall_zeit(slot):
-    """Ein Video kann freigegeben werden, bis das Video fuer den naechsten Termin gebaut wird:
-    8-Uhr-Video bis ca. 15:30, 18-Uhr-Video bis ca. 5:30 am naechsten Morgen. So wartet nie mehr als eins."""
+    """Ein Video kann bis 1 Stunde vor dem naechsten Termin freigegeben werden:
+    8-Uhr-Video bis 11:00, 12-Uhr-Video bis 17:00, 18-Uhr-Video bis 7:00 am naechsten Morgen."""
     return slot_zeit(naechster_slot(ab=slot_zeit(slot))) - VERFALL_VOR_NAECHSTEM
 
 
@@ -2138,7 +2302,11 @@ def modus_noetig():
         f.write(f"noetig={'1' if noetig else '0'}\n")
 
 
-def knoepfe_fuer(slot, extra=False):
+def knoepfe_fuer(slot, extra=False, auto=False):
+    if auto and not extra:
+        return [[{"text": "⛔ Nicht posten", "callback_data": f"stopp|{slot}"},
+                 {"text": "❌ Neu machen", "callback_data": f"neu|{slot}"}],
+                [{"text": "🚀 Jetzt sofort posten", "callback_data": f"jetzt|{slot}"}]]
     if extra:
         return [[{"text": "🚀 Jetzt posten", "callback_data": f"jetzt|{slot}"},
                  {"text": "❌ Neu machen", "callback_data": f"neu|{slot}"}]]
@@ -2158,20 +2326,47 @@ def modus_erstellen():
     if eintrag.get("status") in ("wartet", "freigegeben", "gepostet"):
         log(f"Fuer {slot} gibt es schon ein Video ({eintrag['status']}) – nichts zu tun.")
         return
+    global WUNSCH_THEMA
+    aus_warteschlange = None
+    if not extra and not WUNSCH_THEMA:
+        schlange = ideen_laden()["warteschlange"]
+        if schlange:
+            aus_warteschlange = schlange[0]
+            WUNSCH_THEMA = aus_warteschlange
+            log(f"Thema aus deiner Warteschlange: {WUNSCH_THEMA}")
     log(f"Erstelle {'Extra-Video' if extra else 'Video'} fuer {slot} ...")
     video, daten, check, dauer = erstelle_video()
+    if aus_warteschlange:
+        d = ideen_laden()
+        if d["warteschlange"] and d["warteschlange"][0] == aus_warteschlange:
+            d["warteschlange"].pop(0)
+            ideen_speichern(d)
     uhrzeit = slot.split(" ")[1]
     tag = "heute" if slot_zeit(slot).date() == jetzt().date() else slot_zeit(slot).strftime("%d.%m.")
-    kopf = ((f"⚡ Wunsch-Video zu „{WUNSCH_THEMA}“ – geht raus, sobald du auf 🚀 drückst\n\n" if WUNSCH_THEMA else
-             "⚡ Extra-Video – geht raus, sobald du auf 🚀 drückst\n\n") if extra else
-            f"🗓 Geplant für {tag} {uhrzeit} Uhr\n✅ = pünktlich posten · 🚀 = sofort posten · ❌ = neues Video\n\n")
-    msg = telegram_senden(video, daten, check, dauer, knoepfe=knoepfe_fuer(slot, extra), kopfzeile=kopf)
+    if aus_warteschlange:
+        kopf_extra = f"💡 Aus deiner Ideen-Liste: „{aus_warteschlange}“\n"
+    else:
+        kopf_extra = ""
+    auto = bool(status_laden().get("auto")) and not extra
+    if auto:
+        kopf_extra += (f"🤖 AUTO-MODUS: geht automatisch um {uhrzeit} Uhr raus.\n"
+                       f"⛔ = nicht posten · ❌ = neues Video · 🚀 = sofort\n\n")
+    if auto:
+        kopf = kopf_extra
+    elif extra:
+        kopf = kopf_extra + (f"⚡ Wunsch-Video zu „{WUNSCH_THEMA}“ – geht raus, sobald du auf 🚀 drückst\n\n"
+                             if WUNSCH_THEMA else "⚡ Extra-Video – geht raus, sobald du auf 🚀 drückst\n\n")
+    else:
+        kopf = kopf_extra + (f"🗓 Geplant für {tag} {uhrzeit} Uhr\n"
+                             f"✅ = pünktlich posten · 🚀 = sofort posten · ❌ = neues Video\n\n")
+    msg = telegram_senden(video, daten, check, dauer, knoepfe=knoepfe_fuer(slot, extra, auto), kopfzeile=kopf)
     st = status_laden()                           # neu laden (koennte sich geaendert haben)
-    st["slots"][slot] = {"status": "wartet", "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+    st["slots"][slot] = {"status": "freigegeben" if auto else "wartet", "auto": auto,
+                         "run_id": os.environ.get("GITHUB_RUN_ID", ""),
                          "message_id": msg, "titel": daten["titel"], "thema": daten.get("thema", ""), "extra": extra,
                          "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat()}
     status_speichern(st)
-    log(f"FERTIG: Video fuer {slot} wartet auf Freigabe")
+    log(f"FERTIG: Video fuer {slot} {'automatisch freigegeben (Auto-Modus)' if auto else 'wartet auf Freigabe'}")
 
 
 def _artefakt_laden(run_id):
@@ -2206,13 +2401,14 @@ def modus_pruefen():
 
     # 0) Befehle vom Tuersteher
     befehl = os.environ.get("AKTION", "")
-    if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht"):
+    if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht", "idee", "ideen", "ideen_leeren",
+                  "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen"):
         befehl_ausfuehren(st, befehl)
         status_speichern(st)
         if befehl == "status":
             return
     # 1) Knopfdruecke: sofort vom Telegram-Tuersteher (Cloudflare) weitergereicht, sonst selbst abholen
-    if befehl in ("ok", "neu", "jetzt", "teil2") and os.environ.get("AKTION_SLOT"):
+    if befehl in ("ok", "neu", "jetzt", "teil2", "stopp") and os.environ.get("AKTION_SLOT"):
         aktion_verarbeiten(st, os.environ["AKTION"], os.environ["AKTION_SLOT"], vom_tuersteher=True)
     upd = tg("getUpdates", offset=st.get("tg_offset", 0), timeout=0, allowed_updates=json.dumps(["callback_query"]))
     for u in upd.get("result", []) if upd.get("ok") else []:
@@ -2271,7 +2467,17 @@ def modus_pruefen():
                 telegram_text(f"👀 Das {slot.split(' ')[1]}-Uhr-Video ist noch nicht freigegeben. Wenn du jetzt ✅ drückst, "
                               f"geht es sofort raus (möglich bis {bis} Uhr).")
 
-    # 3) Instagram-Token rechtzeitig verlaengern (laeuft sonst nach 60 Tagen ab)
+    # 3) Selbstheilung + Fruehwarnungen
+    try:
+        selbstheilung(st)
+    except Exception as e:
+        log(f"Selbstheilung: {e}")
+    try:
+        token_warnung(st)
+    except Exception as e:
+        log(f"Token-Check: {e}")
+
+    # 4) Instagram-Token rechtzeitig verlaengern (laeuft sonst nach 60 Tagen ab)
     try:
         instagram_token_pflegen(st)
     except Exception as e:
@@ -2341,7 +2547,124 @@ def statistik_senden(st, wochenbericht=False):
     telegram_text(text)
 
 
+def modus_hoerprobe():
+    """Schickt Hoerproben als Sprachnachricht nach Telegram (fuer /voice test)."""
+    wunsch = os.environ.get("STIMME_TEST", "").strip()
+    namen = [n for n in (wunsch.split(",") if wunsch else EMPFOHLEN) if n.strip()]
+    WORK.mkdir(parents=True, exist_ok=True)
+    for name in namen[:5]:
+        name = name.strip()
+        if not name.startswith("eleven:"):
+            name = next((k for k in STIMMEN if k.lower() == name.lower()), name)
+        wav, ogg = WORK / f"probe_{len(name)}.wav", WORK / "probe.ogg"
+        try:
+            quelle = sprechen(HOERPROBE, wav, stimme=name)
+            ffmpeg("-i", wav, "-c:a", "libopus", "-b:a", "48k", ogg)
+            info = STIMMEN.get(name, "")
+            with open(ogg, "rb") as f:
+                requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendVoice", timeout=120,
+                              data={"chat_id": TG_CHAT, "caption": f"🎙 {name} {info}\nWählen mit: /voice {name}"
+                                    + ("" if quelle.startswith(("Gemini", "ElevenLabs")) else "\n(⚠️ Ersatzstimme, Gemini gerade nicht erreichbar)")},
+                              files={"voice": ("probe.ogg", f, "audio/ogg")})
+        except Exception as e:
+            telegram_text(f"⚠️ Hörprobe für {name} nicht möglich: {e}")
+
+
 def befehl_ausfuehren(st, befehl):
+    if befehl == "voice":
+        wahl = os.environ.get("AKTION_SLOT", "").strip()
+        aktuell = st.get("stimme") or TTS_STIMME
+        if not wahl or wahl == "-":
+            liste = "\n".join(f"{'👉 ' if k == aktuell else '• '}{k} – {v}" for k, v in STIMMEN.items())
+            telegram_text(f"🎙 STIMMEN (aktuell: {aktuell})\n\n{liste}\n\n"
+                          f"Probe hören: /voice test  (vergleicht {', '.join(EMPFOHLEN)})\n"
+                          f"oder: /voice test Orus\nWechseln: /voice Orus")
+            return
+        if wahl.lower().startswith("eleven:"):
+            st["stimme"] = wahl
+            telegram_text(f"🎙 Stimme auf ElevenLabs ({wahl.split(':', 1)[1]}) gestellt. Gilt ab dem nächsten Video.\n"
+                          + ("" if ELEVEN_KEY else "⚠️ Dafür braucht GitHub das Secret ELEVENLABS_API_KEY (Starter-Abo wegen kommerzieller Lizenz)."))
+            return
+        name = next((k for k in STIMMEN if k.lower() == wahl.lower()), None)
+        if not name:
+            telegram_text(f"🤔 Die Stimme „{wahl}“ kenne ich nicht. Alle Stimmen: /voice")
+            return
+        st["stimme"] = name
+        telegram_text(f"🎙 Stimme gewechselt: {aktuell} → {name} ({STIMMEN[name]}). Gilt ab dem nächsten Video.")
+        return
+    if befehl == "musik":
+        wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+        alt = float(st.get("musik_lautstaerke", MUSIK_LAUTSTAERKE))
+        neu = {"leiser": alt * 0.7, "lauter": alt * 1.35, "aus": 0.0, "an": 0.11, "normal": 0.11}.get(wahl)
+        if neu is None:
+            stufe = "aus" if alt == 0 else f"{round(alt / 0.11 * 100)} %"
+            telegram_text(f"🎵 Musik-Lautstärke: {stufe} (100 % = Standard)\n/musik leiser · /musik lauter · /musik aus · /musik normal")
+            return
+        st["musik_lautstaerke"] = round(min(neu, 0.35), 3)
+        stufe = "aus" if neu == 0 else f"{round(st['musik_lautstaerke'] / 0.11 * 100)} %"
+        telegram_text(f"🎵 Musik ist jetzt: {stufe}. Gilt ab dem nächsten Video.")
+        return
+    if befehl == "einstellungen":
+        telegram_text("⚙️ DEINE EINSTELLUNGEN\n\n"
+                      f"🤖 Auto-Modus: {'AN (postet ohne Freigabe)' if st.get('auto') else 'AUS (Freigabe nötig)'}\n"
+                      f"⏸ Pause: {'AN' if st.get('pause') else 'aus'}\n"
+                      f"🎙 Stimme: {st.get('stimme') or TTS_STIMME}\n"
+                      f"🎵 Musik: {'aus' if float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) == 0 else str(round(float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) / 0.11 * 100)) + ' %'}\n"
+                      f"🧠 Schwierigkeit: {st.get('max_schwierigkeit', MAX_SCHWIERIGKEIT)}\n"
+                      f"🗓 Termine: {', '.join(f'{h:02d}:{m:02d}' for h, m in SLOTS)}\n"
+                      f"▶️ YouTube: {'öffentlich' if os.environ.get('YT_SICHTBARKEIT') == 'public' else 'privat (Audit offen)'}\n\n"
+                      "Ändern: /auto · /pause · /voice · /musik · /schwierigkeit")
+        return
+    if befehl == "auto_an":
+        st["auto"] = True
+        telegram_text("🤖 AUTO-MODUS AN\nAb jetzt werden alle Videos automatisch zu ihrer Uhrzeit gepostet – ohne Freigabe.\n"
+                      "Du bekommst trotzdem jedes Video vorher zu sehen und kannst mit ⛔ stoppen oder mit ❌ neu machen.\n"
+                      "Notbremse für alles: /stopp · Zurück zur Freigabe: /auto aus")
+        return
+    if befehl == "auto_aus":
+        st["auto"] = False
+        telegram_text("✋ AUTO-MODUS AUS\nAb jetzt musst du jedes Video wieder mit ✅ freigeben. "
+                      "Bereits automatisch freigegebene Videos gehen noch raus (mit ⛔ stoppbar).")
+        return
+    if befehl == "notstopp":
+        gestoppt = []
+        for slot, e in st.get("slots", {}).items():
+            if e.get("status") in ("wartet", "freigegeben"):
+                e["status"] = "gestoppt"
+                gestoppt.append(slot)
+                tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=e.get("message_id"),
+                   reply_markup=json.dumps({"inline_keyboard": [
+                       [{"text": "⛔ Gestoppt (Notbremse)", "callback_data": "x"}],
+                       [{"text": "🚀 Doch posten", "callback_data": f"jetzt|{slot}"}]]}))
+        telegram_text(f"🛑 NOTBREMSE: {len(gestoppt)} geplante(s) Video(s) gestoppt"
+                      + (f" ({', '.join(x.split(' ')[1] for x in gestoppt)})" if gestoppt else "")
+                      + ". Die Automatik läuft weiter – für eine Pause zusätzlich /pause.")
+        return
+    if befehl == "idee":
+        text = os.environ.get("AKTION_SLOT", "").strip()[:80]
+        d = ideen_laden()
+        if text and text != "-":
+            d["warteschlange"].append(text)
+            ideen_speichern(d)
+            platz = len(d["warteschlange"])
+            telegram_text(f"💡 „{text}“ ist vorgemerkt (Platz {platz}). Kommt "
+                          + ("beim nächsten automatischen Video." if platz == 1 else f"in {platz} automatischen Videos.")
+                          + "\nSofort statt später? Dann /thema " + text)
+        return
+    if befehl == "ideen_leeren":
+        d = ideen_laden()
+        d["warteschlange"] = []
+        ideen_speichern(d)
+        telegram_text("🧹 Deine Ideen-Liste ist geleert.")
+        return
+    if befehl == "ideen":
+        d = ideen_laden()
+        schlange = "\n".join(f"{i+1}. {t}" for i, t in enumerate(d["warteschlange"])) or "(leer – mit /idee Thema hinzufügen)"
+        vorrat = "\n".join(f"• {t}" for t in list(d["backlog"])[:10]) or "(wird beim nächsten Video gefüllt)"
+        telegram_text(f"💡 DEINE IDEEN-LISTE (kommt als Nächstes dran)\n{schlange}\n\n"
+                      f"🧠 IDEEN-VORRAT DER KI ({len(d['backlog'])} Stück, Auszug)\n{vorrat}\n\n"
+                      f"/idee Thema – vormerken · /ideen leeren – Liste löschen")
+        return
     if befehl in ("stats", "wochenbericht"):
         statistik_senden(st, wochenbericht=befehl == "wochenbericht")
         return
@@ -2366,10 +2689,10 @@ def befehl_ausfuehren(st, befehl):
                       "Mit /weiter geht's wieder los.")
     elif befehl == "weiter":
         st["pause"] = False
-        telegram_text("▶️ Pause beendet. Das nächste Video kommt wieder automatisch um 5:30 bzw. 15:30.")
+        telegram_text("▶️ Pause beendet. Die Videos kommen wieder automatisch (gebaut 2,5 h vor 8, 12 und 18 Uhr).")
     elif befehl == "status":
         namen = {"wartet": "⏳ wartet auf dich", "freigegeben": "✅ freigegeben", "gepostet": "🎉 gepostet",
-                 "verworfen": "❌ verworfen", "verfallen": "⌛ verfallen", "fehler": "⚠️ Fehler"}
+                 "verworfen": "❌ verworfen", "verfallen": "⌛ verfallen", "fehler": "⚠️ Fehler", "gestoppt": "⛔ gestoppt"}
         zeilen = []
         for slot, e in sorted(st.get("slots", {}).items())[-8:]:
             z = f"{slot}  {namen.get(e.get('status'), e.get('status'))}\n   „{e.get('titel', '–')}“"
@@ -2382,7 +2705,8 @@ def befehl_ausfuehren(st, befehl):
         gepostet = sum(1 for e in st.get("slots", {}).values() if e.get("status") == "gepostet")
         ig = st.get("ig_token_erneuert", "noch nie")[:10]
         telegram_text("📊 FAKTENFIEBER STATUS\n\n"
-                      + ("⏸ PAUSE ist aktiv (/weiter zum Fortsetzen)\n\n" if st.get("pause") else "▶️ Automatik läuft\n\n")
+                      + ("⏸ PAUSE ist aktiv (/weiter zum Fortsetzen)\n" if st.get("pause") else "▶️ Automatik läuft\n")
+                      + ("🤖 Auto-Modus: AN (postet ohne Freigabe)\n\n" if st.get("auto") else "✋ Auto-Modus: AUS (Freigabe nötig)\n\n")
                       + "\n\n".join(zeilen or ["(noch keine Videos)"])
                       + f"\n\n🎬 Gepostet (letzte 7 Tage): {gepostet}"
                       + f"\n🧠 Schwierigkeits-Grenze: {st.get('max_schwierigkeit', MAX_SCHWIERIGKEIT)}"
@@ -2403,13 +2727,24 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
         else:
             telegram_text("⚠️ Konnte Teil 2 nicht starten.")
         return
-    darf = ("wartet", "freigegeben", "fehler") if aktion == "jetzt" else ("wartet",)
+    darf = {"jetzt": ("wartet", "freigegeben", "fehler", "gestoppt"), "stopp": ("wartet", "freigegeben"),
+            "neu": ("wartet", "freigegeben", "gestoppt")}.get(aktion, ("wartet",))
     if not eintrag or eintrag.get("status") not in darf:
         antwort("Schon erledigt 👍")
         if vom_tuersteher and eintrag:
             telegram_text(f"ℹ️ Für {slot} ist schon alles erledigt (Status: {eintrag.get('status')}).")
         return
     uhr = slot.split(" ")[1]
+    if aktion == "stopp":
+        eintrag["status"] = "gestoppt"
+        antwort("⛔ Wird nicht gepostet")
+        tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
+           reply_markup=json.dumps({"inline_keyboard": [
+               [{"text": "⛔ Gestoppt – wird nicht gepostet", "callback_data": "x"}],
+               [{"text": "🚀 Doch posten", "callback_data": f"jetzt|{slot}"},
+                {"text": "❌ Neues Video", "callback_data": f"neu|{slot}"}]]}))
+        log(f"{slot}: gestoppt")
+        return
     if aktion == "jetzt":
         eintrag["status"] = "freigegeben"
         eintrag["sofort"] = True
@@ -2447,6 +2782,68 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
             telegram_text("⚠️ Konnte das neue Video nicht automatisch starten. Bitte in GitHub "
                           "unter Actions → Erstellen → Run workflow starten.")
         log(f"{slot}: verworfen, neues Video angefordert")
+
+
+def selbstheilung(st):
+    """Fehlt kurz vor einem Termin das Video (z. B. weil ein Lauf abgestuerzt ist), wird es automatisch nachgebaut."""
+    if st.get("pause"):
+        return
+    slot = naechster_slot(ab=jetzt() - timedelta(minutes=25))
+    zeit = slot_zeit(slot)
+    noch = zeit - jetzt()
+    if not (timedelta(minutes=20) < noch < timedelta(hours=2, minutes=15)):
+        return
+    if st["slots"].get(slot, {}).get("status") in ("wartet", "freigegeben", "gepostet"):
+        return
+    versuche = st.setdefault("nachgebaut", {})
+    if versuche.get(slot, 0) >= 1:
+        return
+    if erstellen_laeuft():
+        log("Selbstheilung: Erstellen laeuft gerade noch – alles gut, nichts zu tun.")
+        return
+    versuche[slot] = versuche.get(slot, 0) + 1
+    if _neu_starten(slot):
+        telegram_text(f"🩹 Für {slot.split(' ')[1]} Uhr war noch kein Video da (der Lauf ist wohl hängengeblieben). "
+                      f"Ich baue es jetzt automatisch nach – kommt in ca. 15 Minuten.")
+        log(f"Selbstheilung: Video fuer {slot} nachgebaut")
+
+
+def erstellen_laeuft():
+    """Laeuft oder wartet gerade ein Erstellen-Lauf bei GitHub?"""
+    if not (GH_TOKEN and GH_REPO):
+        return False
+    try:
+        for status in ("in_progress", "queued"):
+            r = requests.get(f"https://api.github.com/repos/{GH_REPO}/actions/workflows/erstellen.yml/runs",
+                             params={"status": status, "per_page": 1}, timeout=20,
+                             headers={"Authorization": f"Bearer {GH_TOKEN}", "Accept": "application/vnd.github+json"})
+            if r.json().get("total_count", 0) > 0:
+                return True
+    except Exception:
+        pass
+    return False
+
+
+def token_warnung(st):
+    """Warnt rechtzeitig, bevor der GitHub-Zugriffstoken (GH_PAT) ablaeuft."""
+    if not GH_PAT or st.get("token_check") == jetzt().strftime("%Y-%m-%d"):
+        return
+    st["token_check"] = jetzt().strftime("%Y-%m-%d")
+    r = requests.get("https://api.github.com/user", timeout=20, headers={"Authorization": f"Bearer {GH_PAT}"})
+    ablauf = r.headers.get("github-authentication-token-expiration", "")
+    if r.status_code == 401:
+        telegram_text("🔑 Achtung: Der GitHub-Token (GH_PAT) funktioniert nicht mehr (abgelaufen oder gelöscht). "
+                      "Instagram-Token-Verlängerung und GitHub-Pages-Upload laufen dann nicht. Bitte neuen Token anlegen.")
+        return
+    if ablauf:
+        try:
+            tage = (datetime.strptime(ablauf[:19], "%Y-%m-%d %H:%M:%S") - datetime.utcnow()).days
+        except ValueError:
+            return
+        if tage <= 14:
+            telegram_text(f"🔑 Erinnerung: Dein GitHub-Token (GH_PAT) läuft in {tage} Tagen ab ({ablauf[:10]}). "
+                          f"Rechtzeitig unter github.com/settings/personal-access-tokens verlängern bzw. neu anlegen "
+                          f"und das Secret GH_PAT ersetzen. Gleiches gilt für den Token beim Cloudflare-Türsteher.")
 
 
 def instagram_token_pflegen(st):
@@ -2491,7 +2888,8 @@ if __name__ == "__main__":
     try:
         modus = sys.argv[1] if len(sys.argv) > 1 else "test"
         {"test": main, "erstellen": modus_erstellen, "pruefen": modus_pruefen, "noetig": modus_noetig,
-         "status": lambda: befehl_ausfuehren(status_laden(), os.environ.get("AKTION") or "status")}[modus]()
+         "status": lambda: befehl_ausfuehren(status_laden(), os.environ.get("AKTION") or "status"),
+         "hoerprobe": modus_hoerprobe}[modus]()
     except SystemExit as e:
         if e.code not in (0, None):
             telegram_text(f"❌ Faktenfieber: Kein Video erstellt.\n{e.code}")
