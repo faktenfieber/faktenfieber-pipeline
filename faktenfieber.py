@@ -642,6 +642,57 @@ def ideen_verbraucht(titel):
         ideen_speichern(d)
 
 
+MIN_LESER = int(os.environ.get("MIN_LESER", "40"))          # Leser pro Tag (Median), darunter = Nischenthema
+MIN_LESER_PERSON = int(os.environ.get("MIN_LESER_PERSON", "400"))   # Personen nur, wenn wirklich bekannt
+
+
+def beliebtheit(titel_liste, tage=60):
+    """Wie viele Leute lesen den Artikel normalerweise? Median der Tagesaufrufe (Ausreisser durch News zaehlen nicht)."""
+    from concurrent.futures import ThreadPoolExecutor
+    from urllib.parse import quote
+    ende = jetzt_utc().date() - timedelta(days=1)
+    start = ende - timedelta(days=tage)
+
+    def holen(t):
+        url = ("https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/de.wikipedia/all-access/user/"
+               f"{quote(t.replace(' ', '_'), safe='')}/daily/{start:%Y%m%d}/{ende:%Y%m%d}")
+        try:
+            r = requests.get(url, headers=WIKI_HEADERS, timeout=20)
+            if r.status_code == 404:
+                return t, 0
+            werte = sorted(x["views"] for x in r.json().get("items", []))
+            werte += [0] * max(0, tage - len(werte))       # Tage ohne Eintrag = 0 Aufrufe
+            return t, sorted(werte)[len(werte) // 2]
+        except Exception:
+            return t, None
+    with ThreadPoolExecutor(8) as pool:
+        return dict(pool.map(holen, titel_liste))
+
+
+def sind_personen(titel_liste):
+    """Welche Artikel handeln von einem einzelnen Menschen? (Wikidata: 'ist ein' = Mensch)"""
+    personen = set()
+    try:
+        for i in range(0, len(titel_liste), 40):
+            d = wiki(prop="pageprops", ppprop="wikibase_item", titles="|".join(titel_liste[i:i + 40]), redirects=1)
+            qids = {p["pageprops"]["wikibase_item"]: p["title"] for p in d["query"]["pages"] if p.get("pageprops")}
+            if not qids:
+                continue
+            e = requests.get(WIKIDATA_API, headers=WIKI_HEADERS, timeout=30, params={
+                "action": "wbgetentities", "ids": "|".join(qids), "props": "claims", "format": "json"}).json()
+            for q, ent in e.get("entities", {}).items():
+                for c in ent.get("claims", {}).get("P31", []):
+                    if ((c.get("mainsnak") or {}).get("datavalue") or {}).get("value", {}).get("id") == "Q5":
+                        personen.add(qids.get(q))
+    except Exception as ex:
+        log(f"Personen-Check nicht moeglich: {ex}")
+    return personen
+
+
+def jetzt_utc():
+    return datetime.now().astimezone()
+
+
 def themen_pool(benutzt):
     """Kandidaten aus 3 Quellen: KI-Ideen (konkret + spannend), aktuelle Trends, Zufall aus Wikipedia."""
     global _KANDIDATEN, SERIE
@@ -687,8 +738,29 @@ def themen_pool(benutzt):
     except Exception as e:
         log(f"Intros nicht ladbar: {e}")
         intros = {t: "" for t in titel}
-    _KANDIDATEN = {t: {"quelle": pool[t][0], "hook": pool[t][1], "intro": intros.get(t, "")}
-                   for t in titel if t in intros}
+    kand = {t: {"quelle": pool[t][0], "hook": pool[t][1], "intro": intros.get(t, "")} for t in titel if t in intros}
+    # Beliebtheits- und Personen-Check: keine Nischenthemen, keine Portraets unbekannter Leute
+    try:
+        leser = beliebtheit(list(kand))
+        personen = sind_personen(list(kand))
+        raus = []
+        for t, v in kand.items():
+            v["leser"] = leser.get(t)
+            v["person"] = t in personen
+            if WUNSCH_THEMA or v["leser"] is None:
+                continue
+            if v["leser"] < MIN_LESER or (v["person"] and v["leser"] < MIN_LESER_PERSON):
+                raus.append(t)
+        if len(kand) - len(raus) >= 3:
+            for t in raus:
+                kand.pop(t)
+        else:                                      # zu wenig uebrig -> die beliebtesten Nicht-Personen behalten
+            gut = sorted((t for t in kand if not kand[t]["person"]), key=lambda t: -(kand[t]["leser"] or 0))[:6]
+            kand = {t: kand[t] for t in gut} or kand
+        log(f"Beliebtheits-Check: {len(raus)} Nischenthemen/unbekannte Personen aussortiert, {len(kand)} bleiben")
+    except Exception as e:
+        log(f"Beliebtheits-Check uebersprungen: {e}")
+    _KANDIDATEN = kand
     return _KANDIDATEN
 
 
@@ -696,7 +768,10 @@ def thema_waehlen(benutzt):
     kandidaten = {t: v for t, v in themen_pool(benutzt).items() if t not in _VERSUCHT}
     if not kandidaten:
         raise RuntimeError("Keine Themen-Kandidaten mehr")
-    liste = "\n\n".join(f"### {t}  [{v['quelle']}]\n{v['hook'] + ' | ' if v['hook'] else ''}{v['intro']}"
+    liste = "\n\n".join(f"### {t}  [{v['quelle']}]"
+                        + (f" (~{v['leser']} Leser/Tag)" if v.get("leser") else "")
+                        + (" [PERSON]" if v.get("person") else "")
+                        + f"\n{v['hook'] + ' | ' if v['hook'] else ''}{v['intro']}"
                         for t, v in kandidaten.items())
     wunsch = (f'\nDER KANALBETREIBER WUENSCHT SICH DAS THEMA: "{WUNSCH_THEMA}". Nimm das Thema, das diesen Wunsch '
               f"am besten trifft UND am spannendsten ist.\n") if WUNSCH_THEMA else ""
@@ -716,18 +791,50 @@ Nutze die Lerndaten oben (falls vorhanden): mehr von dem, was bei uns gut lief, 
 Bewerte (1-10): "viral" (Stopp- und Weitererzaehl-Faktor), "verstaendlich" (ohne Vorwissen sofort klar).
 Nur ein Thema mit viral >= 8 und verstaendlich >= 8. Trends nur, wenn sich daraus eine echte Story machen laesst
 (keine reinen Promi- oder Nachrichtenmeldungen, keine Todesfaelle von Personen).
+"Leser/Tag" zeigt, wie viele Menschen sich normalerweise dafuer interessieren - mehr ist meist besser.
+KEINE Portraets von Personen [PERSON], die die breite Masse nicht kennt (Journalisten, Lokalpolitiker, Sportler
+aus Randsportarten, Wissenschaftler ...). Eine Person geht nur, wenn ihre Geschichte fuer sich allein krass ist
+(z. B. ein beruehmter Hochstapler) - dann geht es um die GESCHICHTE, nicht um den Lebenslauf.
+WEITERERZAEHL-TEST: Formuliere in "weitererzaehlen" den EINEN Satz, mit dem man das morgen einem Freund erzaehlt
+("Alter, wusstest du, dass ..."). Er muss sofort ein "Was?! Echt?!" ausloesen. Wenn dir kein solcher Satz einfaellt,
+ist das Thema nicht gut genug - nimm ein anderes.
 
 {liste}
 
 Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "story": "die Story in einem kurzen Satz",
+"weitererzaehlen": "Alter, wusstest du, dass ...", "unbekannte_person": true/false,
 "viral": 1-10, "verstaendlich": 1-10}}"""
-    wahl, _ = ki(prompt, temperatur=0.4)
-    titel = wahl.get("titel", "")
-    if titel not in kandidaten:
-        titel = (difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten))[0]
+    bester = None
+    for runde in range(3):                         # bis zu 3 Anlaeufe, bis ein Thema den Test besteht
+        wahl, _ = ki(prompt, temperatur=0.4 + 0.15 * runde)
+        titel = wahl.get("titel", "")
+        if titel not in kandidaten:
+            titel = (difflib.get_close_matches(titel, list(kandidaten), n=1, cutoff=0) or list(kandidaten))[0]
+        try:
+            punkte = int(wahl.get("viral", 0)) + int(wahl.get("verstaendlich", 0))
+        except (TypeError, ValueError):
+            punkte = 0
+        satz = str(wahl.get("weitererzaehlen", "")).strip()
+        besteht = (punkte >= 16 and len(satz) > 25 and not wahl.get("unbekannte_person")
+                   and not (kandidaten[titel].get("person") and (kandidaten[titel].get("leser") or 0) < MIN_LESER_PERSON
+                            and not WUNSCH_THEMA))
+        if bester is None or (besteht, punkte) > (bester[2], bester[1]):
+            bester = (titel, punkte, besteht, wahl)
+        if besteht:
+            break
+        log(f"Thema „{titel}“ faellt durch den Weitererzaehl-Test (viral {wahl.get('viral')}, "
+            f"Person: {wahl.get('unbekannte_person')}) – suche ein besseres")
+        _VERSUCHT.add(titel)
+        kandidaten.pop(titel, None)
+        if not kandidaten:
+            break
+        liste_neu = "\n\n".join(b for b in liste.split("\n\n") if not b.startswith(f"### {titel} "))
+        prompt = prompt.replace(liste, liste_neu)
+        liste = liste_neu
+    titel, _, _, wahl = bester
     _VERSUCHT.add(titel)
-    log(f"Gewaehlt: {titel} [{kandidaten[titel]['quelle']}] (viral {wahl.get('viral')}, "
-        f"verstaendlich {wahl.get('verstaendlich')}) – {wahl.get('story', '')}")
+    log(f"Gewaehlt: {titel} [{(_KANDIDATEN or {}).get(titel, {}).get('quelle', '?')}] (viral {wahl.get('viral')}, "
+        f"verstaendlich {wahl.get('verstaendlich')}) – „{wahl.get('weitererzaehlen', wahl.get('story', ''))}“")
     return titel
 
 
@@ -853,7 +960,7 @@ STIL:
 Antworte NUR mit JSON:
 {{
   "thema": "{titel}",
-  "titel": "YouTube-Titel, max. 60 Zeichen, macht neugierig, keine Clickbait-Luege",
+  "titel": "max. 45 Zeichen, KEIN Doppelpunkt, eine klare Neugier-Luecke, ohne Kontext verstaendlich, keine Luege",
   "szenen": [{{"text": "...", "bilder": [0], "suchbegriff_en": "... oder null"}}],
   "behauptungen": [{{"aussage": "...", "beleg": "woertliches Zitat aus dem Artikel"}}],
   "beschreibung": "2-3 Saetze, erzaehlt neugierig weiter, endet mit Aufforderung zum Folgen",
@@ -904,6 +1011,14 @@ def hook_und_loop(daten):
     if len(szenen) < 3:
         return daten
     text = "\n".join(f"{i+1}. {s['text']}" for i, s in enumerate(szenen))
+    bilder = [b for b in daten.get("_bilder", []) if not b.get("ki")]
+    bilder_teil = ""
+    if bilder:
+        bilder_teil = ("\n4) ERSTES BILD: Die ersten 0,5 Sekunden entscheiden. Welches dieser echten Bilder ist das "
+                       "spektakulaerste, auffaelligste, das zum ersten Satz passt? (Menschen, Action, Zerstoerung, "
+                       "Ungewoehnliches schlagen Landkarten, Gebaeude von aussen und Portraetfotos.)\n"
+                       + "\n".join(f"{i}: {(b.get('beschreibung') or b.get('datei', ''))[:110]}"
+                                    for i, b in enumerate(daten.get("_bilder", [])) if not b.get("ki")) + "\n")
     prompt = f"""Du bist Experte fuer virale Shorts (YouTube/Instagram). Hier ist ein fertiges Skript, ein Satz pro Zeile.
 Verbessere NUR den ERSTEN und den LETZTEN Satz und den TITEL. Benutze nur Fakten, die schon im Skript stehen.
 
@@ -927,14 +1042,18 @@ SKRIPT:
    schreib stattdessen eine starke Pointe als letzten Satz und setze "loop": false.
    Keine Floskeln wie "und deshalb fragen sich heute noch viele".
 
-3) TITEL fuer YouTube/Instagram (aktuell: "{daten.get('titel', '')}"): Schreib 3 Varianten, max. 55 Zeichen,
-   die neugierig machen, aber NICHT luegen (kein Clickbait, das das Video nicht einloest). Konkret statt allgemein,
-   gerne mit Zahl oder Widerspruch. Bewerte jede (Wuerde ICH klicken?) und nimm die beste.
-
+3) TITEL fuer YouTube/Instagram (aktuell: "{daten.get('titel', '')}"): Schreib 3 Varianten.
+   REGELN: max. 45 Zeichen. KEIN Doppelpunkt, kein "&", keine Aufzaehlung, kein "Von ... bis ...".
+   EINE klare Neugier-Luecke (man will sofort wissen, was dahintersteckt), ohne Kontext verstaendlich,
+   einfache Woerter, gerne mit Zahl oder Widerspruch. NICHT luegen (das Video muss es einloesen).
+   GUT: "Dieses Schiff sank nach nur 20 Minuten" · "Koenige durften nicht verreisen" · "Das erste Handy wog 1 Kilo"
+   SCHLECHT: "Spotify: 11 Mrd. Dollar & dein Bier-Fehler" (verwirrend) · "Katja Gloger: Von Moskau bis Washington" (Lebenslauf)
+   Bewerte jede ehrlich (Wuerde ICH klicken?) und nimm die beste.
+{bilder_teil}
 Antworte NUR mit JSON:
 {{"hook_varianten": [{{"text": "...", "punkte": 1-10}}], "erster_satz": "...", "letzter_satz": "...",
   "loop": true/false, "loop_test": "letzter Satz + erster Satz am Stueck gelesen",
-  "titel_varianten": [{{"text": "...", "punkte": 1-10}}], "titel": "..."}}"""
+  "titel_varianten": [{{"text": "...", "punkte": 1-10}}], "titel": "...", "bestes_bild": Nummer oder null}}"""
     try:
         neu, modell = ki(prompt, temperatur=0.7)
     except Exception as e:
@@ -947,10 +1066,18 @@ Antworte NUR mit JSON:
         any(f in letzter.lower() for f in FLOSKELN) and not neu.get("loop"))
     if neu.get("loop") and not ok_erster:
         ok_letzter = False                         # Loop-Ende ohne passenden Anfang waere sinnlos
-    titel = str(neu.get("titel", "")).strip().strip('"')
-    if 8 <= len(titel) <= 70:
+    titel = titel_waehlen(neu, daten)
+    if titel:
         daten["_titel_alt"] = daten.get("titel")
         daten["titel"] = titel
+    try:
+        nr = int(neu.get("bestes_bild"))
+        if 0 <= nr < len(daten.get("_bilder", [])) and not daten["_bilder"][nr].get("ki"):
+            alt = [n for n in (szenen[0].get("bilder") or []) if str(n) != str(nr)]
+            szenen[0]["bilder"] = [nr] + alt[:1]
+            log(f"Erstes Bild: {(daten['_bilder'][nr].get('beschreibung') or daten['_bilder'][nr].get('datei', ''))[:60]}")
+    except (TypeError, ValueError):
+        pass
     if ok_erster:
         szenen[0]["text"] = erster
     if ok_letzter:
@@ -961,6 +1088,37 @@ Antworte NUR mit JSON:
     daten["_hook_punkte"] = beste
     log(f"Hook/Loop ({modell}): Catch {beste}/10, Loop {'ja' if daten['_loop'] else 'nein (Pointe)'}")
     return daten
+
+
+TITEL_MAX = 45
+
+
+def titel_gueltig(t):
+    return 8 <= len(t) <= TITEL_MAX and ":" not in t and "&" not in t and " bis " not in t.lower()
+
+
+def titel_waehlen(neu, daten):
+    """Bester Titel, der die Regeln erfuellt (max. 45 Zeichen, kein Doppelpunkt ...)."""
+    kandidaten = []
+    for v in neu.get("titel_varianten", []) if isinstance(neu.get("titel_varianten"), list) else []:
+        if isinstance(v, dict):
+            try:
+                kandidaten.append((float(v.get("punkte", 0)), str(v.get("text", "")).strip().strip('"')))
+            except (TypeError, ValueError):
+                pass
+    gewaehlt = str(neu.get("titel", "")).strip().strip('"')
+    kandidaten.append((99, gewaehlt))                   # die KI-Wahl zuerst, wenn sie gueltig ist
+    for _, t in sorted(kandidaten, key=lambda x: -x[0]):
+        if titel_gueltig(t):
+            return t
+    for t in (daten.get("titel", ""), daten.get("hook_text", "")):
+        if titel_gueltig(str(t)):
+            return str(t)
+    # letzter Ausweg: kuerzester Kandidat, sauber an einer Wortgrenze gekuerzt
+    t = min((t for _, t in kandidaten if t), key=len, default="").split(":")[-1].replace("&", "und").strip()
+    while len(t) > TITEL_MAX and " " in t:
+        t = t.rsplit(" ", 1)[0]
+    return t if len(t) >= 8 else ""
 
 
 def _norm(t):
