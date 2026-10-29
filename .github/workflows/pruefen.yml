@@ -1,11 +1,11 @@
 name: Freigabe pruefen + posten
 
 # Setzt deine Klicks um und postet freigegebene Videos.
-# Normal startet der Cloudflare-Tuersteher diesen Workflow: sofort bei jedem Klick und minutengenau um 7:55 / 17:55.
-# Der GitHub-Zeitplan hier ist nur das Sicherheitsnetz (ca. 8:20 / 18:20), falls der Wecker mal ausfaellt.
+# Normal startet der Cloudflare-Tuersteher diesen Workflow: sofort bei jedem Klick und minutengenau um 7:55, 11:55 und 17:55.
+# Der GitHub-Zeitplan hier ist nur das Sicherheitsnetz (ca. 8:20, 12:20, 18:20), falls der Wecker mal ausfaellt.
 on:
   schedule:
-    - cron: "20 6,7,16,17 * * *"
+    - cron: "20 6,7,10,11,16,17 * * *"
   workflow_dispatch:
     inputs:
       aktion:
