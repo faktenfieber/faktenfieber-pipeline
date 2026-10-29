@@ -2089,9 +2089,7 @@ def telegram_senden(video, daten, check, dauer, knoepfe=None, kopfzeile=""):
             + (f"↪️ Loop gelesen: „{daten.get('_loop_test')}“\n" if daten.get('_loop') and daten.get('_loop_test') else "")
             + "\n"
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
-            f"Quelle: {daten['quellen'][0]}\n"
-            + (("Bilder: " + "; ".join(daten.get("bildnachweise", [])) + "\n") if daten.get("bildnachweise") else "")
-            + ((f"Musik: {daten['musiknachweis']}\n") if daten.get("musiknachweis") else "")
+            f"{quellen_zeile(daten)}\n"
             + f"\n{' '.join(daten.get('hashtags', []))}\n\n"
             f"🔎 FAKTENCHECK (Prüfer: {check.get('pruefer', '?')})\n{pruef}\n\n"
             f"🧠 Schwierigkeit: {daten.get('_schwierigkeit', '?')} (deine Grenze: {daten.get('_grenze', '?')} · ändern mit /schwierigkeit)\n"
@@ -2116,11 +2114,7 @@ def youtube_beschreibung(daten):
     teile = [daten.get("beschreibung", "")]
     if daten.get("kommentar_frage"):
         teile += ["", f"💬 {daten['kommentar_frage']} Schreib's in die Kommentare!"]
-    teile += ["", f"📚 Quelle: {daten['quellen'][0]}"]
-    if daten.get("bildnachweise"):
-        teile += ["", "📸 Bildnachweise:"] + [f"• {b}" for b in daten["bildnachweise"]]
-    if daten.get("musiknachweis"):
-        teile += ["", f"🎵 Musik: {daten['musiknachweis']}"]
+    teile += ["", quellen_zeile(daten)]
     teile += ["", " ".join(daten.get("hashtags", [])) + ("" if daten.get("_lang") else " #shorts")]
     return "\n".join(teile).replace("<", "").replace(">", "")[:4900]
 
@@ -2186,17 +2180,56 @@ def instagram_caption(daten):
     teile = [daten["titel"], "", daten.get("beschreibung", "")]
     if daten.get("kommentar_frage"):
         teile += ["", f"💬 {daten['kommentar_frage']}"]
-    teile += ["", f"📚 Quelle: {daten['quellen'][0]}"]
-    if daten.get("bildnachweise"):
-        teile += ["📸 " + "; ".join(daten["bildnachweise"])]
-    if daten.get("musiknachweis"):
-        teile += [f"🎵 Musik: {daten['musiknachweis']}"]
+    teile += ["", quellen_zeile(daten)]
     teile += ["", " ".join(hashtags)]
     return "\n".join(teile)[:2150]
 
 
 GH_PAT = os.environ.get("GH_PAT", "")
 GH_OWNER = os.environ.get("GITHUB_REPOSITORY_OWNER", "faktenfieber")
+NACHWEIS_DATEI = ROOT / "data" / "nachweise.json"
+
+
+def quellen_zeile(daten):
+    """Eine kurze Zeile statt langer Listen. Die vollstaendigen Bild-/Musiknachweise (Pflicht bei CC-Lizenzen)
+    stehen gesammelt auf faktenfieber.github.io/quellen."""
+    zeile = "📚 Quelle: Wikipedia"
+    if daten.get("bildnachweise") or daten.get("musiknachweis"):
+        zeile += f" · Bild- & Musiknachweise: {GH_OWNER}.github.io/quellen"
+    return zeile
+
+
+def nachweise_merken(daten):
+    """Merkt sich die Nachweise jedes geposteten Videos fuer die Quellen-Seite."""
+    if daten.get("_lang"):
+        return
+    liste = _lade_json(NACHWEIS_DATEI) or []
+    liste = [e for e in liste if e.get("titel") != daten.get("titel")]
+    liste.append({"datum": jetzt().strftime("%d.%m.%Y"), "titel": daten.get("titel", ""),
+                  "artikel": (daten.get("quellen") or [""])[0], "bilder": daten.get("bildnachweise", []),
+                  "musik": daten.get("musiknachweis", "")})
+    NACHWEIS_DATEI.parent.mkdir(parents=True, exist_ok=True)
+    NACHWEIS_DATEI.write_text(json.dumps(liste[-300:], ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def quellen_html():
+    import html as _h
+    eintraege = ""
+    for e in reversed(_lade_json(NACHWEIS_DATEI) or []):
+        bilder = "".join(f"<li>{_h.escape(b)}</li>" for b in e.get("bilder", []))
+        eintraege += (f"<section><h2>{_h.escape(e['titel'])}</h2><p class=m>{_h.escape(e['datum'])} · "
+                      f"Text: <a href=\"{_h.escape(e['artikel'])}\">Wikipedia</a> (CC BY-SA 4.0)</p>"
+                      + (f"<ul>{bilder}</ul>" if bilder else "")
+                      + (f"<p>🎵 {_h.escape(e['musik'])}</p>" if e.get("musik") else "") + "</section>")
+    return f"""<!doctype html><html lang=de><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><title>Faktenfieber – Quellen</title><style>
+body{{margin:0;background:#0f0f12;color:#eee;font:15px/1.5 system-ui,sans-serif;padding:16px}}main{{max-width:800px;margin:auto}}
+h1{{color:#ffd400}}h2{{font-size:17px;margin:0 0 4px}}section{{background:#1a1a20;border-radius:12px;padding:14px;margin:10px 0}}
+.m{{color:#9a9aa5;font-size:13px;margin:0 0 6px}}a{{color:#ffd400}}ul{{margin:4px 0;padding-left:18px;font-size:14px}}
+</style></head><body><main><h1>🔥 Faktenfieber – Quellen & Bildnachweise</h1>
+<p class=m>Alle Fakten stammen aus Wikipedia. Bilder: Wikimedia Commons (freie Lizenzen) und Pixabay. Musik: freie Lizenzen.</p>
+{eintraege or '<p>Noch keine Videos.</p>'}</main></body></html>"""
+
 
 
 def _github_pages(video):
@@ -2220,6 +2253,7 @@ def _github_pages(video):
         cover = Path(video).with_name("cover.jpg")
         if cover.exists():
             shutil.copy(cover, ordner / "v" / name.replace(".mp4", ".jpg"))
+        (ordner / "quellen.html").write_text(quellen_html(), encoding="utf-8")
         git("config", "user.name", "faktenfieber-bot")
         git("config", "user.email", "actions@users.noreply.github.com")
         git("checkout", "--orphan", "neu")
@@ -2381,6 +2415,10 @@ def veroeffentlichen(video, daten, einzeln=True):
     """Laedt auf YouTube + Instagram hoch. einzeln=True: jede Plattform meldet sich sofort in Telegram.
     Fehler werden immer gemeldet. Gibt Ergebnis-Dict zurueck."""
     ergebnis = {}
+    try:
+        nachweise_merken(daten)
+    except Exception as e:
+        log(f"Nachweise: {e}")
     try:
         vid = youtube_hochladen(video, daten)
         ergebnis["youtube"] = f"https://youtube.com/shorts/{vid}"
