@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v7.0
+FAKTENFIEBER – Pipeline v8.0
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -8,6 +8,7 @@ KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach prob
 """
 import difflib
 import json
+import math
 import os
 import random
 import re
@@ -16,7 +17,7 @@ import subprocess
 import sys
 import time
 import wave
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -423,6 +424,7 @@ def speichere_thema(thema):
 
 WUNSCH_THEMA = os.environ.get("WUNSCH_THEMA", "").strip()
 TEIL2 = WUNSCH_THEMA.endswith(" TEIL2")
+SERIE = None                         # heutiger Themen-Tag (wird in themen_pool gesetzt)
 if TEIL2:
     WUNSCH_THEMA = WUNSCH_THEMA[:-6].strip()
 WUNSCH_HINWEIS = ""
@@ -541,16 +543,23 @@ def ideen_verbraucht(titel):
 
 def themen_pool(benutzt):
     """Kandidaten aus 3 Quellen: KI-Ideen (konkret + spannend), aktuelle Trends, Zufall aus Wikipedia."""
-    global _KANDIDATEN
+    global _KANDIDATEN, SERIE
     if _KANDIDATEN is not None:
         return _KANDIDATEN
+    SERIE = None if WUNSCH_THEMA else themen_tag()
     pool = {}
     if WUNSCH_THEMA:
         pool.update({t: ("ideen", h) for t, h in ideen_brainstorm(set() if TEIL2 else benutzt, WUNSCH_THEMA, 10).items()})
         direkt = artikel_finden(WUNSCH_THEMA)
         if direkt and direkt not in pool:
             pool[direkt] = ("direkt", "")
-    else:
+    elif SERIE:
+        log(f"Themen-Tag: {SERIE[0]}")
+        pool.update({t: ("serie", h) for t, h in ideen_brainstorm(benutzt, SERIE[1], 12).items()})
+        if len(pool) < 4:                         # Serie liefert zu wenig -> normal weiter
+            for t in trend_kandidaten(benutzt):
+                pool.setdefault(t, ("trend", ""))
+    if not WUNSCH_THEMA and (not SERIE or len(pool) < 4):
         # Ideen-Speicher nutzen (spart KI-Anfragen), bei Bedarf auffuellen
         d = ideen_laden()
         backlog = {t: h for t, h in d["backlog"].items() if not schon_benutzt(t, benutzt)}
@@ -590,13 +599,19 @@ def thema_waehlen(benutzt):
                         for t, v in kandidaten.items())
     wunsch = (f'\nDER KANALBETREIBER WUENSCHT SICH DAS THEMA: "{WUNSCH_THEMA}". Nimm das Thema, das diesen Wunsch '
               f"am besten trifft UND am spannendsten ist.\n") if WUNSCH_THEMA else ""
+    if SERIE and not WUNSCH_THEMA:
+        wunsch += (f'\nHEUTE IST THEMEN-TAG "{SERIE[0]}" ({SERIE[1]}). Nimm bevorzugt ein [serie]-Thema, '
+                   f"das wirklich dazu passt.\n")
     prompt = f"""Du bist Chefredakteur eines deutschen Shorts-Kanals, der in den naechsten Tagen viral gehen soll.
 Waehle aus diesen Wikipedia-Artikeln den EINEN, aus dem das fesselndste 50-Sekunden-Video wird.
 [ideen] = Vorschlag der Redaktion, [trend] = wird gerade von vielen gelesen, [zufall]/[direkt] = sonstige.
 {wunsch}
 {VIRAL_KRITERIEN}
 
+{erfolgs_profil()}
+
 Frag dich ehrlich: Wuerde ein normaler Mensch beim Scrollen STOPPEN und das danach Freunden erzaehlen?
+Nutze die Lerndaten oben (falls vorhanden): mehr von dem, was bei uns gut lief, weniger von den Flops.
 Bewerte (1-10): "viral" (Stopp- und Weitererzaehl-Faktor), "verstaendlich" (ohne Vorwissen sofort klar).
 Nur ein Thema mit viral >= 8 und verstaendlich >= 8. Trends nur, wenn sich daraus eine echte Story machen laesst
 (keine reinen Promi- oder Nachrichtenmeldungen, keine Todesfaelle von Personen).
@@ -643,6 +658,9 @@ def hook_merken(stil):
 def skript_erstellen(titel):
     global WUNSCH_HINWEIS, HOOK_STILE_TEXT, HOOK_ZULETZT
     HOOK_ZULETZT = ", ".join(hook_zuletzt()) or "(noch keine)"
+    profil = erfolgs_profil()
+    if profil:
+        HOOK_ZULETZT += "\n  " + profil.replace("\n", "\n  ")
     HOOK_STILE_TEXT = "\n".join(f"  * {k}: {v}" for k, v in HOOK_STILE.items())
     titel, artikel, url = wiki_artikel(titel)
     WUNSCH_HINWEIS = (f"\n- WUNSCH DES KANALBETREIBERS: Das Video soll um \"{WUNSCH_THEMA}\" gehen. Bleib genau bei "
@@ -746,6 +764,11 @@ Antworte NUR mit JSON:
     daten["_artikel"] = artikel
     daten["quellen"] = [f"Wikipedia – {titel}: {url}"]
     daten["_bilder"] = bilder
+    daten["_quelle"] = ((_KANDIDATEN or {}).get(titel) or {}).get("quelle", "wunsch" if WUNSCH_THEMA else "")
+    if SERIE and daten["_quelle"] == "serie":
+        tag = "#" + re.sub(r"[^a-zäöüß]", "", SERIE[0].lower())
+        daten["hashtags"] = [tag] + [h for h in daten.get("hashtags", []) if h.lower() != tag][:6]
+        daten["_serie"] = SERIE[0]
     return daten
 
 
@@ -775,7 +798,7 @@ def hook_und_loop(daten):
         return daten
     text = "\n".join(f"{i+1}. {s['text']}" for i, s in enumerate(szenen))
     prompt = f"""Du bist Experte fuer virale Shorts (YouTube/Instagram). Hier ist ein fertiges Skript, ein Satz pro Zeile.
-Verbessere NUR den ERSTEN und den LETZTEN Satz. Benutze nur Fakten, die schon im Skript stehen.
+Verbessere NUR den ERSTEN und den LETZTEN Satz und den TITEL. Benutze nur Fakten, die schon im Skript stehen.
 
 SKRIPT:
 {text}
@@ -797,9 +820,14 @@ SKRIPT:
    schreib stattdessen eine starke Pointe als letzten Satz und setze "loop": false.
    Keine Floskeln wie "und deshalb fragen sich heute noch viele".
 
+3) TITEL fuer YouTube/Instagram (aktuell: "{daten.get('titel', '')}"): Schreib 3 Varianten, max. 55 Zeichen,
+   die neugierig machen, aber NICHT luegen (kein Clickbait, das das Video nicht einloest). Konkret statt allgemein,
+   gerne mit Zahl oder Widerspruch. Bewerte jede (Wuerde ICH klicken?) und nimm die beste.
+
 Antworte NUR mit JSON:
 {{"hook_varianten": [{{"text": "...", "punkte": 1-10}}], "erster_satz": "...", "letzter_satz": "...",
-  "loop": true/false, "loop_test": "letzter Satz + erster Satz am Stueck gelesen"}}"""
+  "loop": true/false, "loop_test": "letzter Satz + erster Satz am Stueck gelesen",
+  "titel_varianten": [{{"text": "...", "punkte": 1-10}}], "titel": "..."}}"""
     try:
         neu, modell = ki(prompt, temperatur=0.7)
     except Exception as e:
@@ -812,6 +840,10 @@ Antworte NUR mit JSON:
         any(f in letzter.lower() for f in FLOSKELN) and not neu.get("loop"))
     if neu.get("loop") and not ok_erster:
         ok_letzter = False                         # Loop-Ende ohne passenden Anfang waere sinnlos
+    titel = str(neu.get("titel", "")).strip().strip('"')
+    if 8 <= len(titel) <= 70:
+        daten["_titel_alt"] = daten.get("titel")
+        daten["titel"] = titel
     if ok_erster:
         szenen[0]["text"] = erster
     if ok_letzter:
@@ -1025,6 +1057,41 @@ EMPFOHLEN = ["Charon", "Algenib", "Fenrir", "Kore"]      # fuer "/voice test" (V
 ELEVEN_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
 HOERPROBE = ("Neun Wanderer flohen mitten in der Nacht aus ihrem eigenen Zelt. Barfuß. Bei minus dreißig Grad. "
              "Und bis heute weiß niemand so genau, warum.")
+
+
+def modus_hoerprobe():
+    """/voice test: schickt kurze Hoerproben als Sprachnachricht (gleicher Beispielsatz fuer fairen Vergleich)."""
+    global TTS_STIMME
+    WORK.mkdir(parents=True, exist_ok=True)
+    roh = [n.strip() for n in os.environ.get("STIMME_TEST", "").replace(";", ",").split(",") if n.strip()]
+    namen = []
+    for n in roh or EMPFOHLEN:
+        if n.lower().startswith("eleven:"):
+            namen.append(n)
+            continue
+        treffer = next((k for k in STIMMEN if k.lower() == n.lower()), None)
+        if treffer:
+            namen.append(treffer)
+        else:
+            telegram_text(f"🤔 Die Stimme „{n}“ kenne ich nicht – alle Stimmen: /voice")
+    for i, name in enumerate(namen[:6]):
+        wav, ogg = WORK / f"probe{i}.wav", WORK / f"probe{i}.ogg"
+        try:
+            if name.lower().startswith("eleven:"):
+                elevenlabs_tts(HOERPROBE, wav, name.split(":", 1)[1])
+            else:
+                TTS_STIMME = name
+                gemini_tts(HOERPROBE, wav)
+            ffmpeg("-i", wav, "-c:a", "libopus", "-b:a", "48k", ogg)
+            beschreibung = STIMMEN.get(name, "ElevenLabs")
+            with open(ogg, "rb") as f:
+                requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendVoice", timeout=60,
+                              data={"chat_id": TG_CHAT, "caption": f"🎙 {name} – {beschreibung}\nNehmen: /voice {name}"},
+                              files={"voice": ("probe.ogg", f, "audio/ogg")})
+        except Exception as e:
+            telegram_text(f"⚠️ Hörprobe {name} ging nicht: {str(e)[:200]}")
+        if i < len(namen) - 1:
+            time.sleep(4)                         # Gemini-Limit schonen
 
 
 def stimme_aus_status():
@@ -1726,6 +1793,109 @@ def audio_mischen(stimme, musik, gesamt, ziel):
            "-filter_complex", filt, "-map", "[out]", "-t", f"{gesamt:.2f}", "-ar", "44100", ziel)
 
 
+# ---------------------------------------------------------------- KI-Illustrationen (optional)
+KI_BILDER_MAX = 4
+_KI_BILD_MODELL = None
+_KI_BILD_AUS = False
+
+
+def ki_bilder_erlaubt():
+    try:
+        return json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("ki_bilder", True)
+    except Exception:
+        return True
+
+
+def ki_illustration(szene, thema, ziel):
+    """Erzeugt ein Bild mit Gemini (nur mit Gemini-Abrechnung moeglich) und kennzeichnet es sichtbar als KI-Illustration.
+    Klappt es nicht, wird das fuer den Rest des Laufs abgeschaltet – das Video entsteht dann ganz normal ohne."""
+    global _KI_BILD_MODELL, _KI_BILD_AUS
+    if _KI_BILD_AUS or not GEMINI_KEY or not ki_bilder_erlaubt():
+        return None
+    import base64
+    if _KI_BILD_MODELL is None:
+        try:
+            r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                             params={"key": GEMINI_KEY, "pageSize": 1000}, timeout=30).json()
+            namen = [m["name"].split("/")[-1] for m in r.get("models", []) if "image" in m["name"]
+                     and "generateContent" in m.get("supportedGenerationMethods", [])]
+            _KI_BILD_MODELL = sorted(namen, reverse=True)[0] if namen else ""
+        except Exception:
+            _KI_BILD_MODELL = ""
+    if not _KI_BILD_MODELL:
+        _KI_BILD_AUS = True
+        return None
+    auftrag = (f"Cinematic, realistic documentary-style illustration in vertical 9:16 format showing: {szene} "
+               f"(topic: {thema}). Dramatic lighting, high detail. No text, no letters, no logos, no watermarks, "
+               f"no real famous people's faces.")
+    try:
+        r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{_KI_BILD_MODELL}:generateContent",
+                          params={"key": GEMINI_KEY}, timeout=120, json={
+                              "contents": [{"parts": [{"text": auftrag}]}],
+                              "generationConfig": {"responseModalities": ["IMAGE"]}})
+        teile = (r.json().get("candidates") or [{}])[0].get("content", {}).get("parts", [])
+        daten = next((p["inlineData"]["data"] for p in teile if "inlineData" in p), None)
+        if r.status_code != 200 or not daten:
+            raise RuntimeError(f"{r.status_code} {r.text[:150]}")
+    except Exception as e:
+        log(f"KI-Illustrationen nicht verfuegbar ({e}) – fuer diesen Lauf aus.")
+        _KI_BILD_AUS = True
+        return None
+    Path(ziel).write_bytes(base64.b64decode(daten))
+    try:                                           # sichtbare Kennzeichnung
+        from PIL import Image, ImageDraw, ImageFont
+        bild = Image.open(ziel).convert("RGB")
+        z = ImageDraw.Draw(bild)
+        font = ImageFont.truetype(FONT_DATEI, max(18, bild.width // 40))
+        z.text((bild.width * 0.03, bild.height * 0.02), "KI-Illustration", font=font, fill=(255, 255, 255),
+               stroke_width=2, stroke_fill=(0, 0, 0))
+        bild.save(ziel, quality=92)
+    except Exception:
+        pass
+    log(f"KI-Illustration erstellt ({_KI_BILD_MODELL})")
+    return ziel
+
+
+# ---------------------------------------------------------------- Titelbild (Cover)
+def cover_erstellen(video, titel, ziel, zeitpunkt=0.6):
+    """Titelbild im Faktenfieber-Look: Standbild aus dem Video, abgedunkelt, grosser Titel, Marke oben."""
+    from PIL import Image, ImageDraw, ImageEnhance, ImageFont
+    roh = WORK / "cover_roh.jpg"
+    ffmpeg("-ss", f"{zeitpunkt:.2f}", "-i", video, "-frames:v", "1", "-q:v", "2", roh)
+    bild = ImageEnhance.Brightness(Image.open(roh).convert("RGB")).enhance(0.55)
+    zeichnen = ImageDraw.Draw(bild)
+    breite = bild.width - 140
+    woerter, zeilen, groesse = titel.upper().split(), [], 120
+    while groesse >= 60:                           # so gross wie moeglich, max. 4 Zeilen
+        font = ImageFont.truetype(FONT_DATEI, groesse)
+        zeilen, akt = [], ""
+        for w in woerter:
+            test = f"{akt} {w}".strip()
+            if font.getlength(test) <= breite:
+                akt = test
+            else:
+                zeilen.append(akt)
+                akt = w
+        zeilen.append(akt)
+        if len(zeilen) <= 4 and all(font.getlength(z) <= breite for z in zeilen):
+            break
+        groesse -= 8
+    hoehe = len(zeilen) * int(groesse * 1.15)
+    y = (bild.height - hoehe) // 2
+    for i, z in enumerate(zeilen):
+        farbe = (255, 225, 0) if i == 0 else (255, 255, 255)      # erste Zeile gelb wie der Hook
+        x = (bild.width - font.getlength(z)) / 2
+        zeichnen.text((x, y), z, font=font, fill=farbe, stroke_width=8, stroke_fill=(0, 0, 0))
+        y += int(groesse * 1.15)
+    marke = ImageFont.truetype(FONT_DATEI, 44)
+    text = "FAKTENFIEBER"
+    zeichnen.rounded_rectangle([(bild.width - marke.getlength(text)) / 2 - 24, 150,
+                                (bild.width + marke.getlength(text)) / 2 + 24, 222], radius=18, fill=(0, 0, 0))
+    zeichnen.text(((bild.width - marke.getlength(text)) / 2, 158), text, font=marke, fill=(255, 225, 0))
+    bild.save(ziel, quality=90)
+    return ziel
+
+
 # ---------------------------------------------------------------- Video bauen
 def video_bauen(daten):
     global STIMME_GENUTZT
@@ -1740,6 +1910,7 @@ def video_bauen(daten):
     # 1) Voiceover (ein Stueck, damit die Betonung natuerlich durchlaeuft)
     roh = WORK / "voice_roh.wav"
     STIMME_GENUTZT = sprechen(volltext, roh)
+    daten["_stimme"] = STIMME_GENUTZT.split("/")[-1]
     gesamt = wav_dauer(roh)
     log(f"Voiceover ({STIMME_GENUTZT}): {gesamt:.1f} s")
 
@@ -1819,6 +1990,15 @@ def video_bauen(daten):
             for cid, url in clips_suchen(daten.get("suchbegriff_thema") or daten["thema"], teil_dauer, benutzt, teile):
                 benutzt.add(cid)
                 visuals.append(("clip", url))
+        if not visuals or (not bevorzugt and len([v for v in visuals if v[0] == "clip"]) == 0 and not bilder):
+            ki_anzahl = sum(1 for b in bilder if b.get("ki"))
+            if ki_anzahl < KI_BILDER_MAX:
+                pfad = ki_illustration(sz["text"], daten["thema"], WORK / f"ki_{i:02d}.png")
+                if pfad:
+                    bilder.append({"datei": "KI-Illustration", "url": str(pfad), "lokal": True, "ki": True,
+                                   "urheber": "KI (Gemini)", "lizenz": "KI-generiert"})
+                    nutzung[len(bilder) - 1] = 1
+                    visuals = [("bild", len(bilder) - 1)] + visuals
         if not visuals and notfall_bild() is not None:
             visuals.append(("bild", notfall_bild()))
             nutzung[visuals[-1][1]] += 1
@@ -1831,7 +2011,10 @@ def video_bauen(daten):
             if art == "bild":
                 if quelle not in bild_dateien:
                     datei = WORK / f"bild_{quelle:02d}.jpg"
-                    datei.write_bytes(requests.get(bilder[quelle]["url"], headers=WIKI_HEADERS, timeout=120).content)
+                    if bilder[quelle].get("lokal"):
+                        datei = Path(bilder[quelle]["url"])
+                    else:
+                        datei.write_bytes(requests.get(bilder[quelle]["url"], headers=WIKI_HEADERS, timeout=120).content)
                     bild_dateien[quelle] = datei
                 bild_rendern(bild_dateien[quelle], teil_dauer, seg, len(segmente))
             else:
@@ -1843,7 +2026,10 @@ def video_bauen(daten):
         log(f"Szene {i+1}/{len(szenen)}: {arten.count('bild')} echte(s) Bild(er), {arten.count('clip')} Clip(s)")
     genutzte_bilder = [bilder[n] for n in bild_dateien]
     daten["bildnachweise"] = [f"{b['datei'].split(':', 1)[-1]} – {b['urheber']} – {b['lizenz']} (Wikimedia Commons)"
-                              for b in genutzte_bilder]
+                              for b in genutzte_bilder if not b.get("ki")]
+    daten["_ki_bilder"] = sum(1 for b in genutzte_bilder if b.get("ki"))
+    if daten["_ki_bilder"]:
+        daten["bildnachweise"].append(f"{daten['_ki_bilder']} Bild(er) sind KI-Illustrationen (gekennzeichnet)")
     log(f"{len(segmente)} Schnitte, {len(genutzte_bilder)} verschiedene echte Bilder zum Thema")
 
     liste = WORK / "liste.txt"
@@ -1872,6 +2058,10 @@ def video_bauen(daten):
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-t", f"{ende_gesamt:.2f}",
            "-movflags", "+faststart", final)
+    try:
+        cover_erstellen(WORK / "bild.mp4", daten.get("titel", ""), OUT / "cover.jpg")   # Bild ohne Untertitel
+    except Exception as e:
+        log(f"Titelbild nicht moeglich: {e}")
     return final, ende_gesamt
 
 
@@ -1931,7 +2121,7 @@ def youtube_beschreibung(daten):
         teile += ["", "📸 Bildnachweise:"] + [f"• {b}" for b in daten["bildnachweise"]]
     if daten.get("musiknachweis"):
         teile += ["", f"🎵 Musik: {daten['musiknachweis']}"]
-    teile += ["", " ".join(daten.get("hashtags", [])) + " #shorts"]
+    teile += ["", " ".join(daten.get("hashtags", [])) + ("" if daten.get("_lang") else " #shorts")]
     return "\n".join(teile).replace("<", "").replace(">", "")[:4900]
 
 
@@ -1973,6 +2163,15 @@ def youtube_hochladen(video, daten, sichtbarkeit=None):
         raise RuntimeError(f"YouTube-Upload fehlgeschlagen: {r2.status_code} {r2.text[:400]}")
     vid = r2.json()["id"]
     log(f"YouTube-Upload ok: https://youtube.com/shorts/{vid} ({sichtbarkeit})")
+    cover = Path(video).with_name("cover.jpg")
+    if cover.exists():
+        try:
+            t = requests.post("https://www.googleapis.com/upload/youtube/v3/thumbnails/set", params={"videoId": vid},
+                              headers={"Authorization": f"Bearer {token}", "Content-Type": "image/jpeg"},
+                              data=cover.read_bytes(), timeout=60)
+            log("YouTube-Titelbild gesetzt" if t.status_code == 200 else f"YouTube-Titelbild nicht moeglich: {t.text[:120]}")
+        except requests.RequestException:
+            pass
     return vid
 
 
@@ -2018,6 +2217,9 @@ def _github_pages(video):
         (ordner / "v").mkdir()
         name = f"{uuid.uuid4().hex[:12]}.mp4"
         shutil.copy(video, ordner / "v" / name)
+        cover = Path(video).with_name("cover.jpg")
+        if cover.exists():
+            shutil.copy(cover, ordner / "v" / name.replace(".mp4", ".jpg"))
         git("config", "user.name", "faktenfieber-bot")
         git("config", "user.email", "actions@users.noreply.github.com")
         git("checkout", "--orphan", "neu")
@@ -2087,9 +2289,11 @@ def instagram_hochladen(video, daten):
             fehler.append(f"{name}: keine URL")
             continue
         log(f"Video kurz bereitgestellt ({name}) – Instagram holt es ab ...")
-        r = requests.post(f"{IG_API}/{IG_USER}/media", timeout=60, data={
-            "media_type": "REELS", "video_url": video_url, "caption": instagram_caption(daten),
-            "share_to_feed": "true", "thumb_offset": "1500", "access_token": IG_TOKEN})
+        felder = {"media_type": "REELS", "video_url": video_url, "caption": instagram_caption(daten),
+                  "share_to_feed": "true", "thumb_offset": "1500", "access_token": IG_TOKEN}
+        if "github.io" in video_url and Path(video).with_name("cover.jpg").exists():
+            felder["cover_url"] = video_url.replace(".mp4", ".jpg")
+        r = requests.post(f"{IG_API}/{IG_USER}/media", timeout=60, data=felder)
         if r.status_code != 200 or "id" not in r.json():
             raise RuntimeError(f"Instagram-Container fehlgeschlagen: {r.status_code} {r.text[:400]}")
         container = r.json()["id"]
@@ -2402,13 +2606,14 @@ def modus_pruefen():
     # 0) Befehle vom Tuersteher
     befehl = os.environ.get("AKTION", "")
     if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht", "idee", "ideen", "ideen_leeren",
-                  "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen"):
+                  "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen", "kommentare", "kibilder",
+                  "dashboard", "serie", "ziel"):
         befehl_ausfuehren(st, befehl)
         status_speichern(st)
         if befehl == "status":
             return
     # 1) Knopfdruecke: sofort vom Telegram-Tuersteher (Cloudflare) weitergereicht, sonst selbst abholen
-    if befehl in ("ok", "neu", "jetzt", "teil2", "stopp") and os.environ.get("AKTION_SLOT"):
+    if befehl in ("ok", "neu", "jetzt", "teil2", "stopp", "antw", "ign") and os.environ.get("AKTION_SLOT"):
         aktion_verarbeiten(st, os.environ["AKTION"], os.environ["AKTION_SLOT"], vom_tuersteher=True)
     upd = tg("getUpdates", offset=st.get("tg_offset", 0), timeout=0, allowed_updates=json.dumps(["callback_query"]))
     for u in upd.get("result", []) if upd.get("ok") else []:
@@ -2431,6 +2636,7 @@ def modus_pruefen():
                 eintrag["ig_media_id"] = meta.get("_ig_media_id")
                 eintrag["gepostet_um"] = jetzt().isoformat()
                 eintrag["_slot"] = slot
+                archiv_eintragen(slot, eintrag, meta, ergebnis)
                 posting_melden(eintrag, meta, ergebnis)
                 eintrag.pop("_slot", None)
                 log(f"{slot}: gepostet {ergebnis}")
@@ -2477,6 +2683,21 @@ def modus_pruefen():
     except Exception as e:
         log(f"Token-Check: {e}")
 
+    try:
+        stats_aktualisieren()
+    except Exception as e:
+        log(f"Stats: {e}")
+    try:
+        kommentare_pruefen(st)
+    except Exception as e:
+        log(f"Kommentare: {e}")
+    try:
+        _, neu_notiert = verlauf_merken()
+        if neu_notiert and st.get("dashboard"):
+            dashboard_hochladen(st)
+    except Exception as e:
+        log(f"Verlauf/Dashboard: {e}")
+
     # 4) Instagram-Token rechtzeitig verlaengern (laeuft sonst nach 60 Tagen ab)
     try:
         instagram_token_pflegen(st)
@@ -2514,60 +2735,626 @@ def posting_melden(eintrag, meta, ergebnis):
        reply_markup=json.dumps({"inline_keyboard": reihen}))
 
 
-def statistik_senden(st, wochenbericht=False):
-    """Likes + Kommentare (und wenn erlaubt: Aufrufe) der geposteten Instagram-Reels."""
-    posts = [(k, v) for k, v in st.get("slots", {}).items() if v.get("status") == "gepostet" and v.get("ig_media_id")]
-    if not posts:
-        telegram_text("📈 Noch keine Instagram-Posts mit Statistik (zaehlt ab jetzt mit).")
-        return
-    zeilen, werte = [], []
-    for slot, e in sorted(posts)[-14:]:
-        mid = e["ig_media_id"]
+# ================================================================ Lernen aus den Zahlen
+ARCHIV_DATEI = ROOT / "data" / "archiv.json"
+
+
+def archiv_laden():
+    try:
+        return json.loads(ARCHIV_DATEI.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+
+
+def archiv_speichern(archiv):
+    ARCHIV_DATEI.parent.mkdir(parents=True, exist_ok=True)
+    ARCHIV_DATEI.write_text(json.dumps(archiv[-400:], ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def archiv_eintragen(slot, eintrag, meta, ergebnis):
+    """Merkt sich jedes gepostete Video dauerhaft (fuer Statistik, Lernen, Wochen-Video)."""
+    archiv = archiv_laden()
+    yt = (ergebnis.get("youtube") or "").rstrip("/").split("/")[-1] or None
+    archiv.append({
+        "slot": slot, "gepostet": jetzt().isoformat(), "titel": meta.get("titel", ""), "thema": meta.get("thema", ""),
+        "hook_stil": meta.get("hook_stil", ""), "stimme": meta.get("_stimme", ""), "quelle": meta.get("_quelle", ""),
+        "stunde": slot[11:13], "ig": meta.get("_ig_media_id") or eintrag.get("ig_media_id"), "yt": yt,
+        "ig_link": ergebnis.get("instagram"), "run_id": eintrag.get("run_id"), "dauer": meta.get("dauer"),
+        "stats": {},
+    })
+    archiv_speichern(archiv)
+
+
+def _ig_zahlen(media_id):
+    d = {}
+    try:
+        d = requests.get(f"{IG_API}/{media_id}", timeout=30, params={
+            "fields": "like_count,comments_count", "access_token": IG_TOKEN}).json()
+    except requests.RequestException:
+        pass
+    aufrufe = None
+    try:
+        ins = requests.get(f"{IG_API}/{media_id}/insights", timeout=30,
+                           params={"metric": "views", "access_token": IG_TOKEN}).json()
+        aufrufe = ins["data"][0]["values"][0]["value"]
+    except Exception:
+        pass
+    return {"likes": d.get("like_count", 0) or 0, "kommentare": d.get("comments_count", 0) or 0, "aufrufe": aufrufe}
+
+
+def _yt_aufrufe(ids):
+    """Aufrufe/Likes von YouTube (braucht das Secret YT_API_KEY, sonst leer)."""
+    key = os.environ.get("YT_API_KEY", "")
+    if not key or not ids:
+        return {}
+    out = {}
+    for i in range(0, len(ids), 50):
         try:
-            d = requests.get(f"{IG_API}/{mid}", timeout=30, params={
-                "fields": "like_count,comments_count", "access_token": IG_TOKEN}).json()
-        except requests.RequestException:
-            d = {}
-        aufrufe = None
-        try:
-            ins = requests.get(f"{IG_API}/{mid}/insights", timeout=30, params={
-                "metric": "views", "access_token": IG_TOKEN}).json()
-            aufrufe = ins["data"][0]["values"][0]["value"]
+            r = requests.get("https://www.googleapis.com/youtube/v3/videos", timeout=30, params={
+                "part": "statistics", "id": ",".join(ids[i:i + 50]), "key": key}).json()
+            for v in r.get("items", []):
+                st = v.get("statistics", {})
+                out[v["id"]] = {"yt_aufrufe": int(st.get("viewCount", 0)), "yt_likes": int(st.get("likeCount", 0))}
         except Exception:
             pass
-        likes, komm = d.get("like_count", 0) or 0, d.get("comments_count", 0) or 0
-        werte.append((likes + 3 * komm + (aufrufe or 0) / 50, e.get("titel", slot), likes, komm, aufrufe))
-        zeilen.append(f"{slot[5:]}  ❤️ {likes}  💬 {komm}" + (f"  👀 {aufrufe}" if aufrufe is not None else "")
-                      + f"\n   „{e.get('titel', '')[:45]}“")
-    bestes = max(werte)
-    text = (("📈 WOCHENBERICHT\n\n" if wochenbericht else "📈 STATISTIK (Instagram)\n\n") + "\n\n".join(zeilen)
-            + f"\n\n🏆 Bestes Video: „{bestes[1][:50]}“ (❤️ {bestes[2]}, 💬 {bestes[3]})"
-            + ("\n\nℹ️ Aufrufe werden nur angezeigt, wenn die App die Berechtigung "
-               "instagram_business_manage_insights hat." if all(w[4] is None for w in werte) else ""))
+    return out
+
+
+def punkte(stats):
+    """Ein Erfolgswert pro Video (Aufrufe zaehlen am meisten, dann Kommentare, dann Likes)."""
+    aufrufe = (stats.get("aufrufe") or 0) + (stats.get("yt_aufrufe") or 0)
+    return round(aufrufe / 20 + (stats.get("likes", 0) + stats.get("yt_likes", 0)) + 3 * stats.get("kommentare", 0), 1)
+
+
+def stats_aktualisieren(erzwingen=False):
+    """Holt frische Zahlen fuer alle Videos der letzten 30 Tage (hoechstens alle 12 h, ausser erzwungen)."""
+    archiv = archiv_laden()
+    grenze = jetzt() - timedelta(days=30)
+    aktiv = [v for v in archiv if datetime.fromisoformat(v["gepostet"]) > grenze]
+    faellig = [v for v in aktiv if erzwingen or not v.get("stats_am")
+               or jetzt() - datetime.fromisoformat(v["stats_am"]) > timedelta(hours=12)]
+    if not faellig:
+        return archiv
+    yt = _yt_aufrufe([v["yt"] for v in faellig if v.get("yt")])
+    for v in faellig:
+        neu = _ig_zahlen(v["ig"]) if v.get("ig") and IG_TOKEN else {}
+        neu.update(yt.get(v.get("yt"), {}))
+        if neu:
+            v["stats"] = neu
+            v["punkte"] = punkte(neu)
+            v["stats_am"] = jetzt().isoformat()
+    archiv_speichern(archiv)
+    return archiv
+
+
+def erfolgs_profil(archiv=None, mindestens=6):
+    """Was laeuft bei UNS gut? Kurzer Text fuer die KI (Themenwahl + Hook)."""
+    archiv = archiv if archiv is not None else archiv_laden()
+    mit = [v for v in archiv if v.get("punkte") is not None]
+    if len(mit) < mindestens:
+        return ""
+    mittel = sum(v["punkte"] for v in mit) / len(mit)
+
+    def gruppe(feld):
+        g = {}
+        for v in mit:
+            if v.get(feld):
+                g.setdefault(v[feld], []).append(v["punkte"])
+        return sorted(((k, sum(p) / len(p), len(p)) for k, p in g.items() if len(p) >= 2), key=lambda x: -x[1])
+
+    teile = []
+    top = sorted(mit, key=lambda v: -v["punkte"])[:5]
+    flop = sorted(mit, key=lambda v: v["punkte"])[:3]
+    teile.append("Top-Videos: " + "; ".join(f"{v['thema']} ({v['punkte']:.0f})" for v in top))
+    teile.append("Flops: " + "; ".join(f"{v['thema']} ({v['punkte']:.0f})" for v in flop))
+    for feld, name in (("hook_stil", "Hook-Stile"), ("quelle", "Themen-Quellen"), ("stunde", "Uhrzeiten")):
+        g = gruppe(feld)
+        if g:
+            teile.append(f"{name}: " + ", ".join(f"{k} {p / mittel * 100:.0f}%" for k, p, n in g[:4]))
+    return "LERNDATEN UNSERES KANALS (100% = Durchschnitt):\n" + "\n".join(teile)
+
+
+# ================================================================ Kommentare beantworten
+def kommentare_pruefen(st):
+    """Holt neue Instagram-Kommentare, laesst die KI eine Antwort vorschlagen und schickt sie dir mit ✅ / 🙈."""
+    if not (IG_TOKEN and IG_USER) or not st.get("kommentare_an", True):
+        return
+    letzte = st.get("kommentare_check")
+    if letzte and jetzt() - datetime.fromisoformat(letzte) < timedelta(hours=2):
+        return
+    st["kommentare_check"] = jetzt().isoformat()
+    gesehen = set(st.get("kommentare_gesehen", []))
+    if "ig_name" not in st:
+        try:
+            st["ig_name"] = requests.get(f"{IG_API}/me", timeout=30,
+                                         params={"fields": "username", "access_token": IG_TOKEN}).json().get("username", "")
+        except requests.RequestException:
+            st["ig_name"] = ""
+    neue = []
+    for v in [v for v in archiv_laden() if v.get("ig")][-10:]:
+        try:
+            r = requests.get(f"{IG_API}/{v['ig']}/comments", timeout=30, params={
+                "fields": "id,text,username,timestamp,replies{username}", "access_token": IG_TOKEN}).json()
+        except requests.RequestException:
+            continue
+        if "error" in r:
+            if not st.get("kommentare_fehler_gemeldet"):
+                st["kommentare_fehler_gemeldet"] = True
+                telegram_text("ℹ️ Kommentare können nicht gelesen werden – der Instagram-Token braucht die Berechtigung "
+                              "instagram_business_manage_comments (siehe Handbuch). Bis dahin überspringe ich das.")
+            return
+        for k in r.get("data", []):
+            schon_beantwortet = any(a.get("username") == st.get("ig_name") for a in (k.get("replies") or {}).get("data", []))
+            if k["id"] in gesehen or k.get("username") == st.get("ig_name") or schon_beantwortet:
+                gesehen.add(k["id"])
+                continue
+            neue.append((v, k))
+    spam = re.compile(r"(https?://|www\.|\.(com|xyz|ru|io)\b|follower|dm me|check my|promo|gewinnspiel)", re.I)
+    for v, k in neue:
+        if spam.search(k.get("text", "")):
+            gesehen.add(k["id"])                   # Links/Spam gar nicht erst vorschlagen
+    neue = [(v, k) for v, k in neue if k["id"] not in gesehen]
+    for v, k in neue[:5]:                         # nicht mehr als 5 auf einmal
+        gesehen.add(k["id"])
+        try:
+            vorschlag, _ = ki(f"""Du betreust den deutschen Fakten-Kanal FAKTENFIEBER auf Instagram.
+Video: "{v.get('titel')}" (Thema: {v.get('thema')})
+Kommentar von @{k.get('username')}: "{k.get('text', '')[:400]}"
+
+Schreib eine kurze, sympathische Antwort (max. 2 Saetze, locker, Du-Form, 0-1 Emoji). Bei Fragen: ehrlich antworten,
+nur mit dem, was zum Thema sicher stimmt; im Zweifel neugierig zurueckfragen. Keine Werbung, keine Diskussionen.
+Spam, Beleidigungen, Hass oder Links -> "ignorieren": true.
+
+Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false}}""", temperatur=0.7)
+        except Exception as e:
+            log(f"Kommentar-Vorschlag nicht moeglich: {e}")
+            continue
+        if vorschlag.get("ignorieren") or not vorschlag.get("antwort"):
+            continue
+        st.setdefault("antworten", {})[k["id"]] = {"text": vorschlag["antwort"][:300], "titel": v.get("titel", "")}
+        tg("sendMessage", chat_id=TG_CHAT,
+           text=f"💬 Neuer Kommentar zu „{v.get('titel', '')[:40]}“\n@{k.get('username')}: {k.get('text', '')[:300]}\n\n"
+                f"🤖 Vorschlag:\n{vorschlag['antwort'][:300]}",
+           reply_markup=json.dumps({"inline_keyboard": [[{"text": "✅ So antworten", "callback_data": f"antw|{k['id']}"},
+                                                         {"text": "🙈 Ignorieren", "callback_data": f"ign|{k['id']}"}]]}))
+    st["kommentare_gesehen"] = list(gesehen)[-500:]
+    st["antworten"] = dict(list(st.get("antworten", {}).items())[-50:])
+
+
+def kommentar_antworten(st, kommentar_id, senden=True):
+    vorschlag = st.get("antworten", {}).pop(kommentar_id, None)
+    if not vorschlag:
+        return telegram_text("ℹ️ Diesen Kommentar habe ich schon erledigt.")
+    if not senden:
+        return
+    r = requests.post(f"{IG_API}/{kommentar_id}/replies", timeout=30,
+                      data={"message": vorschlag["text"], "access_token": IG_TOKEN})
+    telegram_text("✅ Antwort gepostet." if r.status_code == 200 else f"⚠️ Antwort nicht möglich: {r.text[:200]}")
+
+
+def statistik_senden(st, wochenbericht=False):
+    """Zahlen der letzten Videos (Instagram + YouTube), bestes Video, und beim Wochenbericht KI-Tipps."""
+    archiv = stats_aktualisieren(erzwingen=True)
+    tage = 7 if wochenbericht else 30
+    neu = [v for v in archiv if datetime.fromisoformat(v["gepostet"]) > jetzt() - timedelta(days=tage)]
+    if not neu:
+        telegram_text("📈 Noch keine geposteten Videos mit Statistik (zählt ab jetzt mit).")
+        return
+    zeilen = []
+    for v in sorted(neu, key=lambda v: v["gepostet"])[-14:]:
+        z = v.get("stats", {})
+        aufr = (z.get("aufrufe") or 0) + (z.get("yt_aufrufe") or 0)
+        zeilen.append(f"{v['slot'][5:]}  👀 {aufr if aufr else '–'}  ❤️ {z.get('likes', 0) + z.get('yt_likes', 0)}  "
+                      f"💬 {z.get('kommentare', 0)}\n   „{v['titel'][:45]}“")
+    bestes = max(neu, key=lambda v: v.get("punkte") or 0)
+    summe = sum((v.get("stats", {}).get("aufrufe") or 0) + (v.get("stats", {}).get("yt_aufrufe") or 0) for v in neu)
+    text = (("📈 WOCHENBERICHT\n\n" if wochenbericht else f"📈 STATISTIK (letzte {tage} Tage)\n\n")
+            + "\n\n".join(zeilen)
+            + f"\n\n🎬 Videos: {len(neu)} · 👀 Aufrufe gesamt: {summe if summe else '–'}"
+            + f"\n🏆 Bestes Video: „{bestes['titel'][:50]}“")
+    if not os.environ.get("YT_API_KEY"):
+        text += "\n\nℹ️ YouTube-Zahlen fehlen noch: dafür das Secret YT_API_KEY anlegen (siehe Handbuch)."
+    telegram_text(text)
+    if wochenbericht:
+        ki_tipps(archiv)
+        try:
+            ziel_senden()
+        except Exception as e:
+            log(f"Ziel im Wochenbericht: {e}")
+
+
+def ki_tipps(archiv):
+    """Die KI analysiert die Zahlen und gibt 3 konkrete Tipps fuer die naechste Woche."""
+    profil = erfolgs_profil(archiv, mindestens=4)
+    if not profil:
+        telegram_text("🧠 Für KI-Tipps brauche ich noch etwas mehr Daten (mind. 4 Videos mit Zahlen).")
+        return
+    try:
+        antwort, _ = ki(f"""Du bist Social-Media-Stratege fuer einen deutschen Fakten-Shorts-Kanal (YouTube + Instagram).
+Hier sind die echten Zahlen des Kanals:
+
+{profil}
+
+Gib 3 konkrete, umsetzbare Tipps fuer die naechste Woche (Themen, Einstieg, Uhrzeit, Stil). Kurz, klar, auf Deutsch,
+locker formuliert. Nur Tipps, die sich wirklich aus den Zahlen ableiten lassen. Wenn die Daten zu duenn sind, sag das ehrlich.
+
+Antworte NUR mit JSON: {{"tipps": ["...", "...", "..."], "themen_vorschlaege": ["konkretes Thema 1", "konkretes Thema 2", "konkretes Thema 3"]}}""",
+                        temperatur=0.4)
+    except Exception as e:
+        log(f"KI-Tipps nicht moeglich: {e}")
+        return
+    tipps = "\n".join(f"{i+1}. {t}" for i, t in enumerate(antwort.get("tipps", [])[:3]))
+    themen = "\n".join(f"• /idee {t}" for t in antwort.get("themen_vorschlaege", [])[:3])
+    telegram_text(f"🧠 KI-TIPPS FÜR NÄCHSTE WOCHE\n\n{tipps}\n\n💡 Themen, die gut passen würden (Zeile kopieren & an mich schicken):\n{themen}")
+
+
+# ================================================================ Monetarisierungs-Ziel + Dashboard
+YT_HANDLE = os.environ.get("YT_HANDLE", "@faktenfieber")
+VERLAUF_DATEI = ROOT / "data" / "verlauf.json"
+# YouTube-Partnerprogramm (Shorts-Weg): Stufe 1 = Fan-Funktionen, Stufe 2 = Werbeeinnahmen
+YPP_STUFEN = [("Stufe 1 (Super Thanks, Kanalmitgliedschaft)", 500, 3_000_000),
+              ("Stufe 2 (Werbegeld aus Shorts)", 1000, 10_000_000)]
+
+
+def kanal_zahlen():
+    """Abos + Aufrufe auf YouTube (YT_API_KEY) und Follower auf Instagram. Fehlendes bleibt None."""
+    z = {"yt_abos": None, "yt_aufrufe_gesamt": None, "yt_shorts_90": None, "ig_follower": None, "ig_beitraege": None}
+    key = os.environ.get("YT_API_KEY", "")
+    if key:
+        try:
+            r = requests.get("https://www.googleapis.com/youtube/v3/channels", timeout=30, params={
+                "part": "statistics", "forHandle": YT_HANDLE, "key": key}).json()
+            item = (r.get("items") or [{}])[0].get("statistics", {})
+            if item:
+                z["yt_abos"] = int(item.get("subscriberCount", 0))
+                z["yt_aufrufe_gesamt"] = int(item.get("viewCount", 0))
+        except Exception as e:
+            log(f"YouTube-Kanalzahlen: {e}")
+        grenze = jetzt() - timedelta(days=90)
+        ids = [v["yt"] for v in archiv_laden() if v.get("yt") and datetime.fromisoformat(v["gepostet"]) > grenze]
+        if ids:
+            z["yt_shorts_90"] = sum(x["yt_aufrufe"] for x in _yt_aufrufe(ids).values())
+        elif z["yt_abos"] is not None:
+            z["yt_shorts_90"] = 0
+    if IG_TOKEN:
+        try:
+            r = requests.get(f"{IG_API}/me", timeout=30, params={
+                "fields": "followers_count,media_count", "access_token": IG_TOKEN}).json()
+            z["ig_follower"] = r.get("followers_count")
+            z["ig_beitraege"] = r.get("media_count")
+        except requests.RequestException:
+            pass
+    return z
+
+
+def verlauf_laden():
+    return _lade_json(VERLAUF_DATEI) or []
+
+
+def verlauf_merken(erzwingen=False):
+    """Einmal am Tag die Kanalzahlen notieren (daraus entstehen Prognose und Dashboard-Kurve)."""
+    verlauf = verlauf_laden()
+    heute = jetzt().date().isoformat()
+    if verlauf and verlauf[-1].get("tag") == heute and not erzwingen:
+        return verlauf, False
+    z = kanal_zahlen()
+    if all(v is None for v in z.values()):
+        return verlauf, False
+    verlauf = [v for v in verlauf if v.get("tag") != heute] + [{"tag": heute, **z}]
+    VERLAUF_DATEI.parent.mkdir(parents=True, exist_ok=True)
+    VERLAUF_DATEI.write_text(json.dumps(verlauf[-400:], ensure_ascii=False, indent=1), encoding="utf-8")
+    return verlauf, True
+
+
+def _pro_tag(verlauf, feld, tage=14):
+    """Durchschnittlicher Zuwachs pro Tag der letzten ~2 Wochen (None, wenn zu wenig Daten)."""
+    punkte_ = [(date.fromisoformat(v["tag"]), v[feld]) for v in verlauf if v.get(feld) is not None]
+    if len(punkte_) < 2:
+        return None
+    ende = punkte_[-1]
+    start = next((p for p in punkte_ if (ende[0] - p[0]).days <= tage), punkte_[0])
+    spanne = (ende[0] - start[0]).days
+    return None if spanne < 3 else (ende[1] - start[1]) / spanne
+
+
+def _balken(anteil, breite=10):
+    voll = max(0, min(breite, round(anteil * breite)))
+    return "▰" * voll + "▱" * (breite - voll)
+
+
+def _zahl(n):
+    if n is None:
+        return "–"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}".replace(".", ",") + " Mio."
+    return f"{n:,}".replace(",", ".")
+
+
+def ziel_senden():
+    """/ziel: Wie weit ist der Kanal von der Monetarisierung entfernt – mit Prognose."""
+    verlauf = verlauf_laden()
+    z = kanal_zahlen()
+    if all(v is None for v in z.values()):
+        telegram_text("🎯 Ich komme noch an keine Kanalzahlen. Dafür braucht GitHub das Secret YT_API_KEY "
+                      "(Anleitung im Handbuch, dauert 3 Minuten).")
+        return
+    text = "🎯 ZIEL: MONETARISIERUNG\n\n"
+    if z["yt_abos"] is None:
+        text += "▶️ YouTube: noch keine Zahlen (Secret YT_API_KEY fehlt)\n"
+    else:
+        abo_rate = _pro_tag(verlauf, "yt_abos")
+        aufr_rate = _pro_tag(verlauf, "yt_shorts_90")
+        text += (f"▶️ YouTube: {_zahl(z['yt_abos'])} Abos · {_zahl(z['yt_shorts_90'])} Shorts-Aufrufe (90 Tage, ca.)\n")
+        for name, abos, aufrufe in YPP_STUFEN:
+            a, b = z["yt_abos"] / abos, (z["yt_shorts_90"] or 0) / aufrufe
+            text += (f"\n{'✅' if a >= 1 and b >= 1 else '🔒'} {name}\n"
+                     f"   Abos     {_balken(a)} {min(a, 1) * 100:.0f} %  ({_zahl(z['yt_abos'])}/{_zahl(abos)})\n"
+                     f"   Aufrufe  {_balken(b)} {min(b, 1) * 100:.0f} %  ({_zahl(z['yt_shorts_90'])}/{_zahl(aufrufe)})\n")
+            if not (a >= 1 and b >= 1):
+                prognose = []
+                if a < 1:
+                    prognose.append(f"Abos in ca. {math.ceil((abos - z['yt_abos']) / abo_rate)} Tagen"
+                                    if abo_rate and abo_rate > 0 else "Abos: noch kein Trend")
+                if b < 1:
+                    prognose.append(f"Aufrufe in ca. {math.ceil((aufrufe - (z['yt_shorts_90'] or 0)) / aufr_rate)} Tagen"
+                                    if aufr_rate and aufr_rate > 0 else "Aufrufe: noch kein Trend")
+                text += "   📅 " + " · ".join(prognose) + "\n"
+        if abo_rate is not None:
+            text += f"\n📈 Tempo: {abo_rate:+.1f} Abos pro Tag".replace(".", ",")
+            if aufr_rate is not None:
+                text += f" · {aufr_rate:+,.0f} Aufrufe pro Tag".replace(",", ".")
+            text += "\n"
+    if z["ig_follower"] is not None:
+        ig_rate = _pro_tag(verlauf, "ig_follower")
+        text += (f"\n📸 Instagram: {_zahl(z['ig_follower'])} Follower · {z.get('ig_beitraege') or 0} Beiträge"
+                 + (f" ({ig_rate:+.1f}/Tag)".replace(".", ",") if ig_rate is not None else "")
+                 + "\n   (Instagram zahlt über Bonus-Programme/Kooperationen – ab ca. 10.000 Followern werden Marken aufmerksam)\n")
+    if len(verlauf) < 4:
+        text += "\nℹ️ Die Prognose wird ab ca. 4 Tagen Daten genau – ich notiere die Zahlen jeden Tag automatisch."
+    text += "\n\nℹ️ Die 90-Tage-Aufrufe sind eine Näherung; die offizielle Zahl steht in YouTube Studio → Verdienen."
     telegram_text(text)
 
 
-def modus_hoerprobe():
-    """Schickt Hoerproben als Sprachnachricht nach Telegram (fuer /voice test)."""
-    wunsch = os.environ.get("STIMME_TEST", "").strip()
-    namen = [n for n in (wunsch.split(",") if wunsch else EMPFOHLEN) if n.strip()]
-    WORK.mkdir(parents=True, exist_ok=True)
-    for name in namen[:5]:
-        name = name.strip()
-        if not name.startswith("eleven:"):
-            name = next((k for k in STIMMEN if k.lower() == name.lower()), name)
-        wav, ogg = WORK / f"probe_{len(name)}.wav", WORK / "probe.ogg"
+def dashboard_html(verlauf, archiv):
+    """Eine einfache, selbststaendige Statistik-Seite (keine Tokens, nur oeffentliche Zahlen)."""
+    import html as _h
+    letzte = verlauf[-1] if verlauf else {}
+    reihe = [v for v in verlauf if v.get("yt_abos") is not None or v.get("ig_follower") is not None][-60:]
+
+    def linie(feld, farbe):
+        werte = [(i, v[feld]) for i, v in enumerate(reihe) if v.get(feld) is not None]
+        if len(werte) < 2:
+            return ""
+        tief, hoch = min(w for _, w in werte), max(w for _, w in werte)
+        spanne = (hoch - tief) or 1
+        breite = max(len(reihe) - 1, 1)
+        pts = " ".join(f"{i / breite * 600:.1f},{175 - (w - tief) / spanne * 160:.1f}" for i, w in werte)
+        return f'<polyline points="{pts}" fill="none" stroke="{farbe}" stroke-width="3" stroke-linejoin="round"/>'
+
+    kurve = linie("yt_abos", "var(--yt)") + linie("ig_follower", "var(--ig)")
+    grenze = jetzt() - timedelta(days=30)
+    neu = sorted([v for v in archiv if datetime.fromisoformat(v["gepostet"]) > grenze],
+                 key=lambda v: -(v.get("punkte") or 0))
+    zeilen = "".join(
+        f"<tr><td>{_h.escape(v['slot'][5:16])}</td><td>{_h.escape(v.get('titel', '')[:70])}</td>"
+        f"<td class=n>{_zahl((v.get('stats', {}).get('aufrufe') or 0) + (v.get('stats', {}).get('yt_aufrufe') or 0))}</td>"
+        f"<td class=n>{v.get('stats', {}).get('likes', 0) + v.get('stats', {}).get('yt_likes', 0)}</td>"
+        f"<td class=n>{v.get('stats', {}).get('kommentare', 0)}</td></tr>" for v in neu[:30])
+    stufen = ""
+    for name, abos, aufrufe in YPP_STUFEN:
+        a = min((letzte.get("yt_abos") or 0) / abos, 1)
+        b = min((letzte.get("yt_shorts_90") or 0) / aufrufe, 1)
+        stufen += (f'<div class=ziel><b>{_h.escape(name)}</b>'
+                   f'<label>Abos {a * 100:.0f} %</label><div class=bar><i style="width:{a * 100:.1f}%"></i></div>'
+                   f'<label>Shorts-Aufrufe 90 Tage {b * 100:.0f} %</label><div class=bar><i style="width:{b * 100:.1f}%"></i></div></div>')
+    stand = jetzt().strftime("%d.%m.%Y %H:%M")
+    return f"""<!doctype html><html lang=de><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1"><meta name=robots content="noindex,nofollow">
+<title>Faktenfieber Dashboard</title><style>
+:root{{--bg:#0f0f12;--card:#1a1a20;--text:#f2f2f2;--muted:#9a9aa5;--akzent:#ffd400;--yt:#ff4d4d;--ig:#c86bff}}
+*{{box-sizing:border-box}}body{{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,sans-serif;padding:16px}}
+main{{max-width:900px;margin:auto}}h1{{font-size:24px;margin:8px 0}}h1 span{{color:var(--akzent)}}
+.kacheln{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0}}
+.k,.ziel,.box{{background:var(--card);border-radius:12px;padding:14px}}.k b{{display:block;font-size:26px}}
+.k small,label,.m{{color:var(--muted);font-size:13px}}.bar{{height:10px;background:#2c2c35;border-radius:5px;overflow:hidden;margin:2px 0 8px}}
+.bar i{{display:block;height:100%;background:var(--akzent)}}.ziele{{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}}
+.ziel b{{display:block;margin-bottom:6px}}svg{{width:100%;height:auto}}table{{width:100%;border-collapse:collapse;font-size:14px}}
+td,th{{padding:6px 4px;border-bottom:1px solid #2c2c35;text-align:left}}.n{{text-align:right;white-space:nowrap}}
+.box{{margin-top:12px;overflow-x:auto}}.leg span{{margin-right:14px}}</style></head><body><main>
+<h1>🔥 Faktenfieber <span>Dashboard</span></h1><div class=m>Stand: {stand} · aktualisiert sich täglich</div>
+<div class=kacheln>
+<div class=k><small>YouTube-Abos</small><b>{_zahl(letzte.get('yt_abos'))}</b></div>
+<div class=k><small>Shorts-Aufrufe (90 T.)</small><b>{_zahl(letzte.get('yt_shorts_90'))}</b></div>
+<div class=k><small>Instagram-Follower</small><b>{_zahl(letzte.get('ig_follower'))}</b></div>
+<div class=k><small>Videos (30 T.)</small><b>{len(neu)}</b></div></div>
+<h2>Ziel: Monetarisierung</h2><div class=ziele>{stufen}</div>
+<div class=box><div class="m leg"><span style="color:var(--yt)">━ YouTube-Abos</span><span style="color:var(--ig)">━ Instagram-Follower</span></div>
+<svg viewBox="0 0 600 190">{kurve or '<text x=10 y=100 fill="#9a9aa5">Kurve erscheint ab 2 Tagen Daten</text>'}</svg></div>
+<div class=box><h2>Videos der letzten 30 Tage</h2><table><tr><th>Termin</th><th>Titel</th><th class=n>👀</th><th class=n>❤️</th><th class=n>💬</th></tr>
+{zeilen or '<tr><td colspan=5 class=m>Noch keine Videos mit Zahlen</td></tr>'}</table></div>
+</main></body></html>"""
+
+
+def dashboard_hochladen(st):
+    """Legt die Seite auf faktenfieber.github.io/<geheimer-name>.html (Rest der Website bleibt unveraendert)."""
+    if not GH_PAT or not st.get("dashboard"):
+        return None
+    import tempfile
+    seite = dashboard_html(verlauf_laden(), archiv_laden())
+    repo = f"https://x-access-token:{GH_PAT}@github.com/{GH_OWNER}/{GH_OWNER}.github.io.git"
+    ordner = Path(tempfile.mkdtemp())
+    git = lambda *a: subprocess.run(["git", *a], cwd=ordner, check=True, capture_output=True, text=True)
+    try:
+        subprocess.run(["git", "clone", "--depth", "1", "--branch", "main", repo, str(ordner)],
+                       check=True, capture_output=True, text=True)
+        (ordner / f"{st['dashboard']}.html").write_text(seite, encoding="utf-8")
+        git("config", "user.name", "faktenfieber-bot")
+        git("config", "user.email", "actions@users.noreply.github.com")
+        git("checkout", "--orphan", "neu")          # ohne Historie, damit das Repo klein bleibt
+        git("add", "-A")
+        git("commit", "-m", "Dashboard")
+        git("push", "-f", "origin", "neu:main")
+    except subprocess.CalledProcessError as e:
+        log(f"Dashboard-Upload fehlgeschlagen: {(e.stderr or '')[-300:].replace(GH_PAT, '***')}")
+        return None
+    st["dashboard_am"] = jetzt().isoformat()
+    return f"https://{GH_OWNER}.github.io/{st['dashboard']}.html"
+
+
+def dashboard_befehl(st):
+    wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+    if wahl == "aus":
+        st.pop("dashboard", None)
+        telegram_text("📊 Dashboard aus. Die Seite wird nicht mehr aktualisiert (sie verschwindet beim nächsten Video-Upload).")
+        return
+    if not GH_PAT:
+        telegram_text("📊 Für das Dashboard braucht GitHub das Secret GH_PAT (hast du schon, wenn Instagram läuft).")
+        return
+    if wahl == "neu" or not st.get("dashboard"):
+        import uuid
+        st["dashboard"] = "d-" + uuid.uuid4().hex[:10]   # schwer zu erraten, nicht in Google
+    verlauf_merken(erzwingen=True)
+    stats_aktualisieren()
+    url = dashboard_hochladen(st)
+    if url:
+        telegram_text(f"📊 Dein Dashboard (aktualisiert sich jeden Tag):\n{url}\n\nDauert beim ersten Mal 1–2 Min., bis "
+                      f"die Seite da ist. Sie ist nicht in Google, aber wer den Link hat, kann sie sehen – also nur "
+                      f"teilen, mit wem du willst. Neuer Link: /dashboard neu · Abschalten: /dashboard aus")
+    else:
+        telegram_text("⚠️ Dashboard konnte nicht hochgeladen werden (Details im Actions-Log).")
+
+
+# ================================================================ Themen-Tage (Serien)
+THEMEN_TAGE = {
+    0: ("Mystery-Montag", "ungeloeste Raetsel, mysterioese Orte, unerklaerte Ereignisse"),
+    2: ("Was-zur-Hölle-Mittwoch", "absurde, kaum zu glaubende aber wahre Geschichten"),
+    4: ("Fail-Freitag", "legendaere Fehlschlaege, Pannen und Fehlentscheidungen der Geschichte"),
+    6: ("Sonntags-Erfinder", "Erfindungen und Entdeckungen mit ueberraschender Entstehungsgeschichte"),
+}
+
+
+def themen_tag():
+    """(Name, Beschreibung) wenn heute Serien-Tag ist und /serie an ist, sonst None."""
+    try:
+        st = status_laden()
+    except Exception:
+        return None
+    if not st.get("serie"):
+        return None
+    return THEMEN_TAGE.get(jetzt().weekday())
+
+
+def serie_befehl(st):
+    wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+    if wahl in ("an", "aus"):
+        st["serie"] = wahl == "an"
+    tage = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+    plan = "\n".join(f"• {tage[t]}: {n} – {b.replace('ae', 'ä').replace('oe', 'ö').replace('ue', 'ü')}"
+                     for t, (n, b) in THEMEN_TAGE.items())
+    telegram_text(f"📺 THEMEN-TAGE sind {'AN' if st.get('serie') else 'AUS'}\n\n{plan}\n\n"
+                  "An diesen Tagen passen alle automatischen Videos zur Serie (mit eigenem Hashtag) – das baut "
+                  "Wiedererkennung auf, Leute kommen gezielt wieder. Die anderen Tage bleiben bunt gemischt.\n"
+                  "/serie an · /serie aus")
+
+
+# ================================================================ Wochen-Video (Top 5)
+def _karte(text_oben, text_gross, ziel, dauer=2.5):
+    """Zwischentitel im Faktenfieber-Look (schwarz, gelb/weiss) als kurzer Clip mit Stille."""
+    from PIL import Image, ImageDraw, ImageFont
+    bild = Image.new("RGB", (W, H), (12, 12, 16))
+    z = ImageDraw.Draw(bild)
+    klein, gross = ImageFont.truetype(FONT_DATEI, 70), ImageFont.truetype(FONT_DATEI, 96)
+    z.text(((W - klein.getlength(text_oben)) / 2, 700), text_oben, font=klein, fill=(255, 225, 0))
+    zeilen, akt = [], ""
+    for w in text_gross.upper().split():
+        if gross.getlength(f"{akt} {w}".strip()) > W - 140:
+            zeilen.append(akt)
+            akt = w
+        else:
+            akt = f"{akt} {w}".strip()
+    zeilen.append(akt)
+    y = 860
+    for zeile in zeilen[:4]:
+        z.text(((W - gross.getlength(zeile)) / 2, y), zeile, font=gross, fill=(255, 255, 255),
+               stroke_width=4, stroke_fill=(0, 0, 0))
+        y += 115
+    png = Path(str(ziel) + ".png")
+    bild.save(png)
+    ffmpeg("-loop", "1", "-i", png, "-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo", "-t", f"{dauer}",
+           "-vf", f"fps={FPS},format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+           "-c:a", "aac", "-b:a", "192k", "-shortest", ziel)
+    return ziel
+
+
+def modus_wochenvideo():
+    """Baut aus den 5 besten Videos der Woche ein laengeres Video (gut fuer Wiedergabezeit/Monetarisierung)."""
+    for d in (OUT, WORK):
+        d.mkdir(parents=True, exist_ok=True)
+    archiv = stats_aktualisieren(erzwingen=True)
+    woche = [v for v in archiv if v.get("run_id") and datetime.fromisoformat(v["gepostet"]) > jetzt() - timedelta(days=7)]
+    woche.sort(key=lambda v: -(v.get("punkte") or 0))
+    top = []
+    for v in woche:
+        if len(top) >= 5:
+            break
         try:
-            quelle = sprechen(HOERPROBE, wav, stimme=name)
-            ffmpeg("-i", wav, "-c:a", "libopus", "-b:a", "48k", ogg)
-            info = STIMMEN.get(name, "")
-            with open(ogg, "rb") as f:
-                requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendVoice", timeout=120,
-                              data={"chat_id": TG_CHAT, "caption": f"🎙 {name} {info}\nWählen mit: /voice {name}"
-                                    + ("" if quelle.startswith(("Gemini", "ElevenLabs")) else "\n(⚠️ Ersatzstimme, Gemini gerade nicht erreichbar)")},
-                              files={"voice": ("probe.ogg", f, "audio/ogg")})
+            video, meta = _artefakt_laden(v["run_id"])
+            top.append((v, video))
         except Exception as e:
-            telegram_text(f"⚠️ Hörprobe für {name} nicht möglich: {e}")
+            log(f"Video '{v['titel']}' nicht mehr verfuegbar: {e}")
+    if len(top) < 3:
+        telegram_text(f"🎬 Wochen-Video: Diese Woche gibt es erst {len(top)} passende Videos (mind. 3 nötig). Nächste Woche!")
+        return
+    top = list(reversed(top))                      # Countdown: Platz 5 zuerst, Platz 1 zum Schluss
+    kw = jetzt().isocalendar()[1]
+    teile, kapitel, zeit = [], [], 0.0
+
+    def dauer(pfad):
+        return float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0",
+                                     str(pfad)], capture_output=True, text=True).stdout or 0)
+
+    intro = _karte("FAKTENFIEBER", f"Die {len(top)} krassesten Fakten der Woche", WORK / "w_intro.mp4", 3)
+    teile.append(intro)
+    kapitel.append((0.0, "Intro"))
+    zeit += dauer(intro)
+    for platz, (v, video) in zip(range(len(top), 0, -1), top):
+        karte = _karte(f"PLATZ {platz}", v["titel"], WORK / f"w_karte_{platz}.mp4")
+        kapitel.append((zeit, f"Platz {platz}: {v['titel']}"))
+        teile += [karte, video]
+        zeit += dauer(karte) + dauer(video)
+    outro = _karte("DAS WAR'S!", "Folg Faktenfieber für mehr unnützes Wissen", WORK / "w_outro.mp4", 3)
+    teile.append(outro)
+    # alles auf ein einheitliches Format bringen und zusammenfuegen
+    einheitlich = []
+    for i, t in enumerate(teile):
+        z = WORK / f"w_teil_{i:02d}.mp4"
+        ffmpeg("-i", t, "-vf", f"scale={W}:{H},fps={FPS},format=yuv420p,setsar=1", "-ar", "44100", "-ac", "2",
+               "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-c:a", "aac", "-b:a", "192k", z)
+        einheitlich.append(z)
+    liste = WORK / "w_liste.txt"
+    liste.write_text("".join(f"file '{p.resolve()}'\n" for p in einheitlich))
+    final = OUT / "wochenvideo.mp4"
+    ffmpeg("-f", "concat", "-safe", "0", "-i", liste, "-c", "copy", "-movflags", "+faststart", final)
+    try:
+        cover_erstellen(einheitlich[2], f"Top {len(top)} Fakten der Woche", OUT / "cover.jpg", zeitpunkt=1.0)
+    except Exception as e:
+        log(f"Cover: {e}")
+
+    kap = "\n".join(f"{int(t // 60)}:{int(t % 60):02d} {name}" for t, name in kapitel)
+    daten = {"titel": f"Die {len(top)} krassesten Fakten der Woche (KW {kw}) | Faktenfieber",
+             "beschreibung": f"Die besten Fakten und Geschichten dieser Woche in einem Video!\n\n{kap}",
+             "quellen": ["Quellen in den einzelnen Shorts auf unserem Kanal"],
+             "hashtags": ["#fakten", "#unnützeswissen", "#faktenfieber", "#top5", "#geschichte"], "_lang": True}
+    try:
+        vid = youtube_hochladen(final, daten)
+        privat = os.environ.get("YT_SICHTBARKEIT", "private") != "public"
+        telegram_text(f"🎬 WOCHEN-VIDEO ist auf YouTube{' (privat – in der Studio-App öffentlich stellen)' if privat else ''}:\n"
+                      f"https://youtube.com/watch?v={vid}\n\n{kap}\n\n"
+                      f"⏱ Länge: {int(zeit // 60)}:{int(zeit % 60):02d} Min. – "
+                      + ("zählt als normales Video (Wiedergabezeit für die Monetarisierung)" if zeit >= 185 else
+                         "unter 3 Min., zählt deshalb noch als Short"))
+    except Exception as e:
+        telegram_text(f"❌ Wochen-Video konnte nicht hochgeladen werden: {e}")
 
 
 def befehl_ausfuehren(st, befehl):
@@ -2611,9 +3398,13 @@ def befehl_ausfuehren(st, befehl):
                       f"🎙 Stimme: {st.get('stimme') or TTS_STIMME}\n"
                       f"🎵 Musik: {'aus' if float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) == 0 else str(round(float(st.get('musik_lautstaerke', MUSIK_LAUTSTAERKE)) / 0.11 * 100)) + ' %'}\n"
                       f"🧠 Schwierigkeit: {st.get('max_schwierigkeit', MAX_SCHWIERIGKEIT)}\n"
+                      f"📺 Themen-Tage: {'an' if st.get('serie') else 'aus'}\n"
+                      f"💬 Kommentar-Vorschläge: {'an' if st.get('kommentare_an', True) else 'aus'}\n"
+                      f"🎨 KI-Illustrationen: {'an' if st.get('ki_bilder', True) else 'aus'}\n"
+                      f"📊 Dashboard: {'an' if st.get('dashboard') else 'aus'}\n"
                       f"🗓 Termine: {', '.join(f'{h:02d}:{m:02d}' for h, m in SLOTS)}\n"
                       f"▶️ YouTube: {'öffentlich' if os.environ.get('YT_SICHTBARKEIT') == 'public' else 'privat (Audit offen)'}\n\n"
-                      "Ändern: /auto · /pause · /voice · /musik · /schwierigkeit")
+                      "Ändern: /auto · /pause · /voice · /musik · /schwierigkeit · /serie · /kommentare · /kibilder · /dashboard")
         return
     if befehl == "auto_an":
         st["auto"] = True
@@ -2625,6 +3416,21 @@ def befehl_ausfuehren(st, befehl):
         st["auto"] = False
         telegram_text("✋ AUTO-MODUS AUS\nAb jetzt musst du jedes Video wieder mit ✅ freigeben. "
                       "Bereits automatisch freigegebene Videos gehen noch raus (mit ⛔ stoppbar).")
+        return
+    if befehl == "kibilder":
+        wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+        if wahl in ("an", "aus"):
+            st["ki_bilder"] = wahl == "an"
+        telegram_text(f"🎨 KI-Illustrationen sind {'AN' if st.get('ki_bilder', True) else 'AUS'}. Sie springen nur ein, "
+                      f"wenn es keine echten Bilder/Clips gibt, und sind immer als „KI-Illustration“ gekennzeichnet. "
+                      f"Funktioniert nur mit Gemini-Abrechnung (sonst wird es automatisch übersprungen).")
+        return
+    if befehl == "kommentare":
+        wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+        if wahl in ("an", "aus"):
+            st["kommentare_an"] = wahl == "an"
+        telegram_text(f"💬 Kommentar-Vorschläge sind {'AN' if st.get('kommentare_an', True) else 'AUS'}. "
+                      f"(/kommentare an · /kommentare aus)")
         return
     if befehl == "notstopp":
         gestoppt = []
@@ -2664,6 +3470,15 @@ def befehl_ausfuehren(st, befehl):
         telegram_text(f"💡 DEINE IDEEN-LISTE (kommt als Nächstes dran)\n{schlange}\n\n"
                       f"🧠 IDEEN-VORRAT DER KI ({len(d['backlog'])} Stück, Auszug)\n{vorrat}\n\n"
                       f"/idee Thema – vormerken · /ideen leeren – Liste löschen")
+        return
+    if befehl == "ziel":
+        ziel_senden()
+        return
+    if befehl == "dashboard":
+        dashboard_befehl(st)
+        return
+    if befehl == "serie":
+        serie_befehl(st)
         return
     if befehl in ("stats", "wochenbericht"):
         statistik_senden(st, wochenbericht=befehl == "wochenbericht")
@@ -2718,6 +3533,9 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
     """✅ / ❌ fuer einen Termin umsetzen."""
     antwort = (lambda text: tg("answerCallbackQuery", callback_query_id=cb_id, text=text)) if cb_id else (lambda text: None)
     eintrag = st["slots"].get(slot)
+    if aktion in ("antw", "ign"):
+        kommentar_antworten(st, slot, senden=aktion == "antw")
+        return
     if aktion == "teil2":
         eintrag = st["slots"].get(slot) or {}
         thema = eintrag.get("thema") or eintrag.get("titel", "")
@@ -2889,7 +3707,7 @@ if __name__ == "__main__":
         modus = sys.argv[1] if len(sys.argv) > 1 else "test"
         {"test": main, "erstellen": modus_erstellen, "pruefen": modus_pruefen, "noetig": modus_noetig,
          "status": lambda: befehl_ausfuehren(status_laden(), os.environ.get("AKTION") or "status"),
-         "hoerprobe": modus_hoerprobe}[modus]()
+         "hoerprobe": modus_hoerprobe, "wochenvideo": modus_wochenvideo}[modus]()
     except SystemExit as e:
         if e.code not in (0, None):
             telegram_text(f"❌ Faktenfieber: Kein Video erstellt.\n{e.code}")
