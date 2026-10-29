@@ -38,7 +38,7 @@
    }
   },
   "2026-10-28 19:09": {
-   "status": "wartet",
+   "status": "verfallen",
    "run_id": "40742246957",
    "message_id": 81,
    "titel": "Die Inquisition: Dein Job war kein Schutz",
@@ -83,7 +83,8 @@
    "titel": "Die geheimnisvolle Bibliothek von Alexandria – was wirklich geschah",
    "extra": false,
    "neu_gemacht": 0,
-   "erstellt": "2026-10-29T05:36:18.819546+01:00"
+   "erstellt": "2026-10-29T05:36:18.819546+01:00",
+   "erinnert": true
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
