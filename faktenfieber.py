@@ -2851,6 +2851,14 @@ def stats_aktualisieren(erzwingen=False):
     aktiv = [v for v in archiv if datetime.fromisoformat(v["gepostet"]) > grenze]
     faellig = [v for v in aktiv if erzwingen or not v.get("stats_am")
                or jetzt() - datetime.fromisoformat(v["stats_am"]) > timedelta(hours=12)]
+    geaendert = False
+    for v in archiv:                              # YouTube-Richtlinie: API-Daten nicht laenger als 30 Tage aufheben
+        if datetime.fromisoformat(v["gepostet"]) <= grenze and any(k.startswith("yt_") for k in v.get("stats", {})):
+            v["stats"] = {k: w for k, w in v["stats"].items() if not k.startswith("yt_")}
+            v["punkte"] = punkte(v["stats"])
+            geaendert = True
+    if geaendert:
+        archiv_speichern(archiv)
     if not faellig:
         return archiv
     yt = _yt_aufrufe([v["yt"] for v in faellig if v.get("yt")])
@@ -3027,7 +3035,7 @@ Antworte NUR mit JSON: {{"tipps": ["...", "...", "..."], "themen_vorschlaege": [
 
 
 # ================================================================ Monetarisierungs-Ziel + Dashboard
-YT_HANDLE = os.environ.get("YT_HANDLE", "@faktenfieber")
+YT_HANDLE = os.environ.get("YT_HANDLE", "@faktenfieber.official")
 VERLAUF_DATEI = ROOT / "data" / "verlauf.json"
 # YouTube-Partnerprogramm (Shorts-Weg): Stufe 1 = Fan-Funktionen, Stufe 2 = Werbeeinnahmen
 YPP_STUFEN = [("Stufe 1 (Super Thanks, Kanalmitgliedschaft)", 500, 3_000_000),
@@ -3040,8 +3048,16 @@ def kanal_zahlen():
     key = os.environ.get("YT_API_KEY", "")
     if key:
         try:
+            kanal = {"forHandle": YT_HANDLE}
+            eigene = [v["yt"] for v in archiv_laden() if v.get("yt")]
+            if eigene:                            # sicherster Weg: Kanal ueber ein eigenes Video finden
+                info = requests.get("https://www.googleapis.com/youtube/v3/videos", timeout=30, params={
+                    "part": "snippet", "id": eigene[-1], "key": key}).json()
+                cid = ((info.get("items") or [{}])[0].get("snippet") or {}).get("channelId")
+                if cid:
+                    kanal = {"id": cid}
             r = requests.get("https://www.googleapis.com/youtube/v3/channels", timeout=30, params={
-                "part": "statistics", "forHandle": YT_HANDLE, "key": key}).json()
+                "part": "statistics", **kanal, "key": key}).json()
             item = (r.get("items") or [{}])[0].get("statistics", {})
             if item:
                 z["yt_abos"] = int(item.get("subscriberCount", 0))
@@ -3079,6 +3095,8 @@ def verlauf_merken(erzwingen=False):
     if all(v is None for v in z.values()):
         return verlauf, False
     verlauf = [v for v in verlauf if v.get("tag") != heute] + [{"tag": heute, **z}]
+    alt = (jetzt() - timedelta(days=30)).date().isoformat()
+    verlauf = [v if v["tag"] >= alt else {k: w for k, w in v.items() if not k.startswith("yt_")} for v in verlauf]
     VERLAUF_DATEI.parent.mkdir(parents=True, exist_ok=True)
     VERLAUF_DATEI.write_text(json.dumps(verlauf[-400:], ensure_ascii=False, indent=1), encoding="utf-8")
     return verlauf, True
