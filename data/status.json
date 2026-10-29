@@ -162,6 +162,17 @@
    "extra": true,
    "neu_gemacht": 0,
    "erstellt": "2026-10-29T16:46:14.926786+01:00"
+  },
+  "2026-10-29 19:07": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "40927726230",
+   "message_id": 159,
+   "titel": "Spotify: 11 Mrd. Dollar & dein Bier-Fehler",
+   "thema": "Spotify",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-29T19:11:57.230378+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
