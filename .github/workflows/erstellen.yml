@@ -1,11 +1,11 @@
 name: Erstellen
 
 # Baut das naechste Video und schickt es mit ✅/❌/🚀 an Telegram.
-# Normal startet der Cloudflare-Wecker diesen Workflow minutengenau um 5:30 und 15:30.
+# Normal startet der Cloudflare-Wecker diesen Workflow minutengenau um 5:30, 9:30 und 15:30.
 # Der GitHub-Zeitplan hier ist nur das Sicherheitsnetz, falls der Wecker mal ausfaellt.
 on:
   schedule:
-    - cron: "50 4,14 * * *"
+    - cron: "50 4,8,14 * * *"
   workflow_dispatch:
     inputs:
       slot:
@@ -62,6 +62,7 @@ jobs:
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
