@@ -124,6 +124,16 @@
    "extra": true,
    "neu_gemacht": 0,
    "erstellt": "2026-10-29T12:01:54.459191+01:00"
+  },
+  "2026-10-29 15:00": {
+   "status": "wartet",
+   "run_id": "40887112639",
+   "message_id": 125,
+   "titel": "Warum das iPhone SE 2022 teurer ist als du denkst",
+   "thema": "IPhone SE (3. Generation)",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-29T15:06:25.525319+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
