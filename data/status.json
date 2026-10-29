@@ -164,7 +164,7 @@
    "erstellt": "2026-10-29T16:46:14.926786+01:00"
   },
   "2026-10-29 19:07": {
-   "status": "wartet",
+   "status": "gepostet",
    "auto": false,
    "run_id": "40927726230",
    "message_id": 159,
@@ -172,7 +172,15 @@
    "thema": "Spotify",
    "extra": true,
    "neu_gemacht": 0,
-   "erstellt": "2026-10-29T19:11:57.230378+01:00"
+   "erstellt": "2026-10-29T19:11:57.230378+01:00",
+   "sofort": true,
+   "fehler": 0,
+   "links": {
+    "youtube": "https://youtube.com/shorts/ZmgpGvfP5eA",
+    "instagram": "https://www.instagram.com/reel/DfFoID2FUx6/"
+   },
+   "ig_media_id": "18134254228671405",
+   "gepostet_um": "2026-10-29T19:15:36.519765+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
