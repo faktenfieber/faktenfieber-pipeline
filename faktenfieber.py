@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FAKTENFIEBER – Pipeline v5.0
+FAKTENFIEBER – Pipeline v5.1
 Wikipedia-Recherche -> Skript -> Faktencheck gegen Quelltext -> Voiceover -> Clips -> Schnitt -> Telegram
 
 KI-Anbieter (alle gratis, mindestens einer noetig – werden der Reihe nach probiert):
@@ -626,11 +626,13 @@ STIL:
   keine Abkuerzungen, keine Sonderzeichen. Der Text wird von einer Computerstimme vorgelesen.
 - 8 bis 12 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
 - VIRAL-REGELN:
-  * Der erste Satz enthaelt SOFORT den krassesten Fakt. Kein Anlauf, keine Einleitung.
+  * Der erste Satz enthaelt SOFORT den krassesten Fakt. Kein Anlauf, keine Einleitung, max. 12 Woerter.
+    Verboten als Einstieg: "Heute", "In diesem Video", "Hast du schon mal", "Lass uns", "Es war einmal".
   * Offene Schleife: Im 2. oder 3. Satz andeuten, dass noch etwas Verrueckteres kommt
     (z. B. "Aber das ist noch nicht mal das Verrueckteste."), und es am Ende wirklich liefern.
-  * Loop-Ende: Der LETZTE Satz ist so formuliert, dass er nahtlos in den ERSTEN Satz uebergeht,
-    wenn das Video von vorne startet (z. B. endet mit "... und genau deshalb fragen sich heute noch viele:").
+  * Ende: Entweder ein ECHTER Loop (der letzte Satz bricht so ab, dass der erste Satz ihn inhaltlich und
+    grammatikalisch vollendet) ODER eine starke Pointe. Floskeln wie "und deshalb fragen sich heute noch viele"
+    sind VERBOTEN, wenn der erste Satz nicht wirklich die Antwort darauf ist.
     KEIN "Folg mir", kein "Abonnieren", keine Verabschiedung im gesprochenen Text.
 - BILDER: Es duerfen NUR Bilder gezeigt werden, die wirklich das Thema zeigen. Nichts Beliebiges!
   "bilder": Liste mit 1-2 Nummern ECHTER Bilder aus der Liste oben, die zu diesem Satz passen.
@@ -678,6 +680,66 @@ def felder_auffuellen(daten):
         daten["hashtags"] = ["#fakten", "#wusstestdu", "#unnützeswissen", "#geschichte", "#faktenfieber"]
     daten.setdefault("behauptungen", [])
     daten.setdefault("musik_stimmung", "spannend")
+    return daten
+
+
+FLOSKELN = ["fragen sich heute noch viele", "fragt man sich bis heute", "und deshalb fragen sich",
+            "in diesem video", "lass uns", "heute schauen wir", "hast du schon mal"]
+
+
+def hook_und_loop(daten):
+    """Feilt nur am ersten und letzten Satz: maximaler Catch am Anfang + Ende, das wirklich zum Anfang passt."""
+    szenen = daten.get("szenen") or []
+    if len(szenen) < 3:
+        return daten
+    text = "\n".join(f"{i+1}. {s['text']}" for i, s in enumerate(szenen))
+    prompt = f"""Du bist Experte fuer virale Shorts (YouTube/Instagram). Hier ist ein fertiges Skript, ein Satz pro Zeile.
+Verbessere NUR den ERSTEN und den LETZTEN Satz. Benutze nur Fakten, die schon im Skript stehen.
+
+SKRIPT:
+{text}
+
+1) ERSTER SATZ = DER CATCH. Er entscheidet in 1-2 Sekunden, ob jemand weiterwischt.
+   - max. 12 Woerter, sofort der krasseste/ueberraschendste Fakt aus dem Skript, konkret statt allgemein
+   - erzeugt eine Frage im Kopf ("Wie bitte? Warum?"), die erst spaeter beantwortet wird
+   - verboten: "Heute", "In diesem Video", "Hast du schon mal", "Lass uns", "Es war einmal", langes Ausholen
+   Schreib 3 verschiedene Varianten, bewerte jede ehrlich von 1-10 (Wuerde ICH stoppen?) und nimm die beste.
+
+2) LETZTER SATZ = DER LOOP. Wenn das Video endet, startet es sofort neu mit dem ersten Satz.
+   WICHTIG: Der erste Satz bleibt ein VOLLSTAENDIGER Satz, der allein als Catch funktioniert (wer neu reinscrollt,
+   hoert zuerst ihn!). Der LETZTE Satz fuehrt so darauf hin, dass beide zusammen wie EIN Gedanke klingen.
+   Beispiel:  letzter: "Und angefangen hat das ganze Drama so:"  ->  erster: "Ein einziger Arbeiter hat eine Schraube vergessen."
+   Beispiel:  letzter: "Deshalb gilt bis heute die verrueckte Regel:"  ->  erster: "Koenige durften nicht einfach verreisen."
+   Beispiel:  letzter: "Und jetzt weisst du auch, warum"  ->  erster: "Dieses Schiff nie wieder gebaut wurde."  <- FALSCH,
+              weil der erste Satz allein keinen Sinn ergibt. Das ist verboten.
+   Der letzte Satz muss sich direkt auf das beziehen, was der erste Satz sagt. Geht das nicht natuerlich, dann
+   schreib stattdessen eine starke Pointe als letzten Satz und setze "loop": false.
+   Keine Floskeln wie "und deshalb fragen sich heute noch viele".
+
+Antworte NUR mit JSON:
+{{"hook_varianten": [{{"text": "...", "punkte": 1-10}}], "erster_satz": "...", "letzter_satz": "...",
+  "loop": true/false, "loop_test": "letzter Satz + erster Satz am Stueck gelesen"}}"""
+    try:
+        neu, modell = ki(prompt, temperatur=0.7)
+    except Exception as e:
+        log(f"Hook/Loop-Feinschliff uebersprungen: {e}")
+        return daten
+    erster, letzter = str(neu.get("erster_satz", "")).strip(), str(neu.get("letzter_satz", "")).strip()
+    ok_erster = (erster and erster[0].isupper() and erster.rstrip()[-1:] in ".!?" and len(erster.split()) <= 16
+                 and not any(f in erster.lower() for f in FLOSKELN))
+    ok_letzter = letzter and len(letzter.split()) <= 20 and not (
+        any(f in letzter.lower() for f in FLOSKELN) and not neu.get("loop"))
+    if neu.get("loop") and not ok_erster:
+        ok_letzter = False                         # Loop-Ende ohne passenden Anfang waere sinnlos
+    if ok_erster:
+        szenen[0]["text"] = erster
+    if ok_letzter:
+        szenen[-1]["text"] = letzter
+    daten["_loop"] = bool(neu.get("loop")) and ok_erster and ok_letzter
+    daten["_loop_test"] = neu.get("loop_test", "")
+    beste = max((v.get("punkte", 0) for v in neu.get("hook_varianten", []) if isinstance(v, dict)), default="?")
+    daten["_hook_punkte"] = beste
+    log(f"Hook/Loop ({modell}): Catch {beste}/10, Loop {'ja' if daten['_loop'] else 'nein (Pointe)'}")
     return daten
 
 
@@ -825,7 +887,7 @@ def reparieren(daten, ergebnis):
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus dem Artikel (Copy-Paste).
-Der Einstieg muss weiterhin sofort neugierig machen. Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 120. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
+Erster und letzter Satz nur aendern, wenn sie selbst fehlerhaft sind (sie wurden extra fuer Catch und Loop optimiert). Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 120. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
@@ -1669,7 +1731,11 @@ def telegram_senden(video, daten, check, dauer, knoepfe=None, kopfzeile=""):
     pruef = "\n".join(f"{'✅' if p.get('beleg_im_text') else '⚠️'} {p.get('behauptung')}"
                       for p in check.get("pruefung", []))
     text = (kopfzeile + f"📌 TITEL\n{daten['titel']}\n\n"
-            f"🪝 EINSTIEG ({daten.get('hook_stil', '?')})\n„{daten['szenen'][0]['text']}“\nEinblendung: {daten.get('hook_text', '–')}\n\n"
+            f"🪝 EINSTIEG ({daten.get('hook_stil', '?')}, Catch {daten.get('_hook_punkte', '?')}/10)\n„{daten['szenen'][0]['text']}“\n"
+            f"Einblendung: {daten.get('hook_text', '–')}\n\n"
+            f"🔚 ENDE ({'Loop ♾️' if daten.get('_loop') else 'Pointe'})\n„{daten['szenen'][-1]['text']}“\n"
+            + (f"↪️ Loop gelesen: „{daten.get('_loop_test')}“\n" if daten.get('_loop') and daten.get('_loop_test') else "")
+            + "\n"
             f"📝 BESCHREIBUNG\n{daten['beschreibung']}\n\n"
             f"Quelle: {daten['quellen'][0]}\n"
             + (("Bilder: " + "; ".join(daten.get("bildnachweise", [])) + "\n") if daten.get("bildnachweise") else "")
@@ -1912,6 +1978,7 @@ def erstelle_video():
             titel = thema_waehlen(benutzt)
             benutzt.add(titel)
             kandidat = skript_erstellen(titel)
+            kandidat = hook_und_loop(kandidat)
             log(f"Skript fertig: {kandidat['titel']} – pruefe Fakten ...")
             ok, ergebnis = faktencheck(kandidat)
             for runde in range(1, 4):
