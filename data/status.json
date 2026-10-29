@@ -183,15 +183,15 @@
    "gepostet_um": "2026-10-29T19:15:36.519765+01:00"
   },
   "2026-10-29 23:22": {
-   "status": "verworfen",
+   "status": "wartet",
    "auto": false,
-   "run_id": "40965245394",
-   "message_id": 165,
-   "titel": "iPhone 12 kommt ohne Stromkabel",
-   "thema": "IPhone 12",
+   "run_id": "40966213713",
+   "message_id": 168,
+   "titel": "Warum das Bermuda‑Dreieck kein Todesort ist",
+   "thema": "Bermudadreieck",
    "extra": true,
    "neu_gemacht": 1,
-   "erstellt": "2026-10-29T23:27:11.341981+01:00"
+   "erstellt": "2026-10-29T23:33:32.554420+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
