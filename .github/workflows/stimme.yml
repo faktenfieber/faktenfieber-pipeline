@@ -1,0 +1,38 @@
+name: Hoerprobe
+
+# Schickt Hoerproben der Stimmen als Sprachnachricht nach Telegram (/voice test).
+on:
+  workflow_dispatch:
+    inputs:
+      stimme:
+        description: "Stimme(n), z. B. Orus oder Charon,Kore (leer = Vergleich der Empfehlungen)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  hoerprobe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Code holen (immer der neueste Stand)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Programme installieren
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          pip install -q requests
+
+      - name: Hoerprobe schicken
+        env:
+          STIMME_TEST: ${{ github.event.inputs.stimme }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python faktenfieber.py hoerprobe
