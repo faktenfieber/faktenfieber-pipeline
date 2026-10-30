@@ -146,7 +146,8 @@ def anbieter_laden():
         for m in ("mistral-medium-latest", "mistral-small-latest"):
             liste.append(("Mistral", m, lambda m_, p, t, u=url: _openai_kompatibel(u, MISTRAL_KEY, m_, p, t)))
     if not liste:
-        sys.exit("Kein KI-Key gefunden! Mindestens MISTRAL_API_KEY, GROQ_API_KEY oder GEMINI_API_KEY setzen.")
+        # kein sys.exit: in Pruef-/Status-Laeufen soll ein fehlender Key nur die KI-Extras ueberspringen
+        raise RuntimeError("Kein KI-Key gefunden! Mindestens MISTRAL_API_KEY, GROQ_API_KEY oder GEMINI_API_KEY setzen.")
     log("KI-Anbieter: " + ", ".join(f"{a}/{m}" for a, m, _ in liste))
     return liste
 
@@ -2907,6 +2908,8 @@ def erstelle_video():
     """Recherche -> Skript -> Faktencheck -> Video. Gibt (video, daten, check, dauer) zurueck."""
     for d in (OUT, WORK):
         d.mkdir(parents=True, exist_ok=True)
+    if not (MISTRAL_KEY or GROQ_KEY or GEMINI_KEY):
+        sys.exit("Kein KI-Key gefunden! Mindestens MISTRAL_API_KEY, GROQ_API_KEY oder GEMINI_API_KEY setzen.")
     if not PIXABAY_KEY:
         sys.exit("PIXABAY_API_KEY fehlt (GitHub Secrets pruefen).")
 
