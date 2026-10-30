@@ -210,7 +210,8 @@
    "thema": "Biosphäre 2",
    "extra": false,
    "neu_gemacht": 0,
-   "erstellt": "2026-10-30T05:39:37.511020+01:00"
+   "erstellt": "2026-10-30T05:39:37.511020+01:00",
+   "erinnert": true
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
