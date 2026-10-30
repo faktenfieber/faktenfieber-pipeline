@@ -3133,7 +3133,7 @@ def modus_pruefen():
     befehl = os.environ.get("AKTION", "")
     if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht", "idee", "ideen", "ideen_leeren",
                   "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen", "kommentare", "kibilder",
-                  "dashboard", "serie", "ziel", "story"):
+                  "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset"):
         befehl_ausfuehren(st, befehl)
         status_speichern(st)
         if befehl == "status":
@@ -3229,6 +3229,10 @@ def modus_pruefen():
         instagram_token_pflegen(st)
     except Exception as e:
         log(f"Instagram-Token-Verlaengerung: {e}")
+    try:
+        cloudflare_token_sync(st)
+    except Exception as e:
+        log(f"Cloudflare-Sync: {e}")
     status_speichern(st)
 
 
@@ -3970,6 +3974,20 @@ def befehl_ausfuehren(st, befehl):
                       f"wenn es keine echten Bilder/Clips gibt, und sind immer als „KI-Illustration“ gekennzeichnet. "
                       f"Funktioniert nur mit Gemini-Abrechnung (sonst wird es automatisch übersprungen).")
         return
+    if befehl == "admin_pin":
+        wert = os.environ.get("AKTION_SLOT", "").strip()
+        if re.fullmatch(r"[0-9a-f]{64}", wert):
+            neu_gesetzt = not st.get("admin_pin")
+            st["admin_pin"] = wert                 # nur ein Hash (mit Geheimschluessel), nie die PIN selbst
+            st.setdefault("admin_version", 1)
+            telegram_text("🔐 Admin-PIN " + ("festgelegt" if neu_gesetzt else "geändert") + ". Falls du das nicht warst: /admin neu")
+        return
+    if befehl == "admin_reset":
+        st.pop("admin_pin", None)
+        st["admin_version"] = int(st.get("admin_version", 1)) + 1
+        telegram_text("🔐 Admin-Zugang zurückgesetzt: alte PIN und alle Anmeldungen sind ungültig. "
+                      "Den neuen Einrichtungs-Link hast du gerade bekommen.")
+        return
     if befehl == "story":
         wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
         if wahl in ("an", "aus"):
@@ -4243,9 +4261,37 @@ def instagram_token_pflegen(st):
     if r.status_code in (201, 204):
         st["ig_token_erneuert"] = jetzt().isoformat()
         log("Instagram-Token verlängert ✅")
+        cloudflare_token_sync(st, neu)
     else:
         telegram_text(f"⚠️ Neuer Instagram-Token konnte nicht gespeichert werden ({r.status_code}). "
                       f"Bitte GH_PAT prüfen (braucht 'Secrets: Read and write').")
+
+
+CF_TOKEN = os.environ.get("CF_API_TOKEN", "")
+CF_KONTO = os.environ.get("CF_ACCOUNT_ID", "")
+CF_WORKER = os.environ.get("CF_WORKER", "faktenfieber-bot")
+
+
+def cloudflare_token_sync(st, token=None):
+    """Gibt dem Tuersteher (Cloudflare) immer den aktuellen Instagram-Token, damit das Live-Dashboard
+    Instagram-Zahlen minuetlich selbst abfragen kann. Braucht die Secrets CF_API_TOKEN + CF_ACCOUNT_ID."""
+    token = token or IG_TOKEN
+    if not (CF_TOKEN and CF_KONTO and token):
+        return
+    import hashlib
+    fingerabdruck = hashlib.sha256(token.encode()).hexdigest()[:12]
+    if st.get("cf_ig_sync") == fingerabdruck:
+        return
+    r = requests.put(f"https://api.cloudflare.com/client/v4/accounts/{CF_KONTO}/workers/scripts/{CF_WORKER}/secrets",
+                     headers={"Authorization": f"Bearer {CF_TOKEN}"}, timeout=30,
+                     json={"name": "IG_ACCESS_TOKEN", "text": token, "type": "secret_text"})
+    if r.status_code == 200 and r.json().get("success"):
+        st["cf_ig_sync"] = fingerabdruck
+        log("Instagram-Token an den Tuersteher (Cloudflare) uebergeben ✅")
+    elif not st.get("cf_sync_fehler_gemeldet"):
+        st["cf_sync_fehler_gemeldet"] = True
+        telegram_text(f"⚠️ Konnte den Instagram-Token nicht an Cloudflare übergeben ({r.status_code}). "
+                      f"Das Live-Dashboard nutzt dann die stündlichen Instagram-Zahlen. Details: {r.text[:200]}")
 
 
 def telegram_text(text):
