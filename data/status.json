@@ -275,6 +275,19 @@
    },
    "ig_media_id": "18124071560515414",
    "gepostet_um": "2026-10-30T16:10:35.782781+01:00"
+  },
+  "2026-10-30 20:28": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "41115501725",
+   "message_id": 225,
+   "titel": "Das größte Luftschiff brannte in Sekunden",
+   "thema": "LZ 129",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-30T20:36:08.466882+01:00",
+   "wunsch": "",
+   "verworfen": []
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
