@@ -250,7 +250,7 @@
    "verworfen": []
   },
   "2026-10-30 15:48": {
-   "status": "wartet",
+   "status": "gepostet",
    "auto": false,
    "run_id": "41074847502",
    "message_id": 219,
@@ -260,7 +260,15 @@
    "neu_gemacht": 0,
    "erstellt": "2026-10-30T15:56:33.930018+01:00",
    "wunsch": "videospiele und das erste videospiel der welt",
-   "verworfen": []
+   "verworfen": [],
+   "sofort": true,
+   "fehler": 0,
+   "links": {
+    "youtube": "https://youtube.com/shorts/JAxmr648SoI",
+    "instagram": "https://www.instagram.com/reel/DfH3v2gDPk_/"
+   },
+   "ig_media_id": "18124071560515414",
+   "gepostet_um": "2026-10-30T16:10:35.782781+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
