@@ -277,7 +277,7 @@
    "gepostet_um": "2026-10-30T16:10:35.782781+01:00"
   },
   "2026-10-30 20:28": {
-   "status": "wartet",
+   "status": "gepostet",
    "auto": false,
    "run_id": "41115501725",
    "message_id": 225,
@@ -287,12 +287,20 @@
    "neu_gemacht": 0,
    "erstellt": "2026-10-30T20:36:08.466882+01:00",
    "wunsch": "",
-   "verworfen": []
+   "verworfen": [],
+   "sofort": true,
+   "fehler": 0,
+   "links": {
+    "youtube": "https://youtube.com/shorts/JlEa_lQAQqk",
+    "instagram": "https://www.instagram.com/reel/DfIWgvbD992/"
+   },
+   "ig_media_id": "18034867760894565",
+   "gepostet_um": "2026-10-30T20:39:24.877818+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
  "token_check": "2026-10-30",
- "kommentare_check": "2026-10-30T17:57:23.586338+01:00",
+ "kommentare_check": "2026-10-30T20:39:30.382570+01:00",
  "ig_name": "faktenfieber.official",
  "kommentare_gesehen": [],
  "antworten": {},
