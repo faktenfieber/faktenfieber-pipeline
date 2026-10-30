@@ -238,19 +238,18 @@
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
- "max_schwierigkeit": 7.0,
  "token_check": "2026-10-30",
  "kommentare_check": "2026-10-30T11:25:55.877229+01:00",
  "ig_name": "faktenfieber.official",
  "kommentare_gesehen": [],
  "antworten": {},
- "ki_bilder": true,
  "dashboard": "d-c98165fa40",
  "dashboard_am": "2026-10-30T07:05:57.588201+01:00",
- "story": false,
  "cf_sync_fehler_gemeldet": true,
  "admin_pin": "c4062b5c0d80fa0e2236a2c112c941350bdfe668120b231054eb5ad4e0f3fb67",
  "admin_version": 1,
  "cf_ig_sync": "2acbd9260578",
- "serie": true
+ "trend_alarm_tag": "2026-10-30",
+ "trends_gemeldet": [],
+ "archiv_nachgetragen": 1
 }
