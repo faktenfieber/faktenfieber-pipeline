@@ -4285,7 +4285,8 @@ def cloudflare_token_sync(st, token=None):
     r = requests.put(f"https://api.cloudflare.com/client/v4/accounts/{CF_KONTO}/workers/scripts/{CF_WORKER}/secrets",
                      headers={"Authorization": f"Bearer {CF_TOKEN}"}, timeout=30,
                      json={"name": "IG_ACCESS_TOKEN", "text": token, "type": "secret_text"})
-    if r.status_code == 200 and r.json().get("success"):
+    if r.status_code in (200, 201) and r.json().get("success"):
+        st.pop("cf_sync_fehler_gemeldet", None)
         st["cf_ig_sync"] = fingerabdruck
         log("Instagram-Token an den Tuersteher (Cloudflare) uebergeben ✅")
     elif not st.get("cf_sync_fehler_gemeldet"):
