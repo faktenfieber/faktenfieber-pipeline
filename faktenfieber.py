@@ -526,6 +526,7 @@ def speichere_thema(thema):
 WUNSCH_THEMA = os.environ.get("WUNSCH_THEMA", "").strip()
 TEIL2 = WUNSCH_THEMA.endswith(" TEIL2")
 SERIE = None                         # heutiger Themen-Tag (wird in themen_pool gesetzt)
+ANDERS_ALS = []                      # Titel/Themen verworfener Videos fuer denselben Termin (-> neuer Blickwinkel)
 if TEIL2:
     WUNSCH_THEMA = WUNSCH_THEMA[:-6].strip()
 WUNSCH_HINWEIS = ""
@@ -775,6 +776,9 @@ def thema_waehlen(benutzt):
                         for t, v in kandidaten.items())
     wunsch = (f'\nDER KANALBETREIBER WUENSCHT SICH DAS THEMA: "{WUNSCH_THEMA}". Nimm das Thema, das diesen Wunsch '
               f"am besten trifft UND am spannendsten ist.\n") if WUNSCH_THEMA else ""
+    if ANDERS_ALS:
+        wunsch += ("\nVERWORFEN wurde bereits: " + "; ".join(ANDERS_ALS[-3:]) + ". Nimm moeglichst einen ANDEREN Artikel "
+                   "zum selben Wunsch (oder denselben nur, wenn es keinen passenden anderen gibt).\n")
     if SERIE and not WUNSCH_THEMA:
         wunsch += (f'\nHEUTE IST THEMEN-TAG "{SERIE[0]}" ({SERIE[1]}). Nimm bevorzugt ein [serie]-Thema, '
                    f"das wirklich dazu passt.\n")
@@ -873,6 +877,10 @@ def skript_erstellen(titel):
     titel, artikel, quellen = quellen_sammeln(titel)
     WUNSCH_HINWEIS = (f"\n- WUNSCH DES KANALBETREIBERS: Das Video soll um \"{WUNSCH_THEMA}\" gehen. Bleib genau bei "
                       f"diesem Thema, auch wenn der Artikel breiter ist.") if WUNSCH_THEMA else ""
+    if ANDERS_ALS:
+        WUNSCH_HINWEIS += ("\n- NEU GEMACHT: Diese Version(en) wurden vom Kanalbetreiber verworfen: "
+                           + "; ".join(ANDERS_ALS[-3:]) + ". Mach es deutlich ANDERS: anderer Einstieg, anderer "
+                           "Blickwinkel, andere Fakten in den Vordergrund, anderer Titel.")
     if TEIL2:
         WUNSCH_HINWEIS += ("\n- DAS IST TEIL 2: Zu diesem Thema gab es schon ein Video. Nimm ANDERE Fakten und einen anderen "
                            "Blickwinkel als die offensichtlichsten. Der Titel enthaelt \"Teil 2\". Der Einstieg darf "
@@ -905,7 +913,8 @@ STIL:
   Gib den gewaehlten Stil in "hook_stil" an. Nicht immer mit "Wusstest du" anfangen.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
-  Roter Faden, jeder Satz baut auf dem vorherigen auf, nichts Unverstaendliches.
+  ROTER FADEN: Erzaehl EINE Geschichte, keine Faktenliste. Jeder Satz knuepft an den vorherigen an
+  (deshalb, aber, dann, das Problem:, und genau da ...). Erst einfuehren, dann darueber reden.
 - SO ERKLAEREN, ALS WUERDEST DU ES EINEM KUMPEL BEIM BIER ODER IN DER PAUSE ERZAEHLEN:
   Fuer Jugendliche UND Erwachsene: nicht kindisch, nicht belehrend, aber ohne Vorwissen sofort verstaendlich.
   * Einfache Alltagssprache, kurze Saetze (max. 12 Woerter), keine Schachtelsaetze, kein Behoerdendeutsch.
@@ -1087,6 +1096,66 @@ Antworte NUR mit JSON:
     beste = max((v.get("punkte", 0) for v in neu.get("hook_varianten", []) if isinstance(v, dict)), default="?")
     daten["_hook_punkte"] = beste
     log(f"Hook/Loop ({modell}): Catch {beste}/10, Loop {'ja' if daten['_loop'] else 'nein (Pointe)'}")
+    return daten
+
+
+def roter_faden(daten):
+    """Prueft, ob die Geschichte logisch durchlaeuft (jeder Satz baut auf dem vorigen auf) und glaettet Spruenge.
+    Erster und letzter Satz (Catch + Loop) bleiben unangetastet, Fakten werden nicht veraendert."""
+    szenen = daten.get("szenen") or []
+    if len(szenen) < 5:
+        return daten
+    text = "\n".join(f"{i+1}. {s['text']}" for i, s in enumerate(szenen))
+    prompt = f"""Du bist Story-Editor fuer kurze Erklaervideos. Lies das Skript (ein Satz pro Zeile) wie ein Zuschauer,
+der NICHTS ueber das Thema weiss. Thema: "{daten.get('thema')}".
+
+{text}
+
+Pruefe den ROTEN FADEN:
+- Versteht man nach Satz 2-3, WORUM es geht (was, wo, wann)?
+- Baut jeder Satz logisch auf dem vorherigen auf? Gibt es Spruenge, bei denen man denkt "Hae, wie kommt der jetzt darauf?"
+- Werden Personen/Dinge eingefuehrt, BEVOR sie vorkommen? Gibt es Saetze ohne Bezug?
+- Wird die offene Frage vom Anfang am Ende wirklich beantwortet?
+Bewerte den roten Faden ehrlich von 1-10.
+Wenn unter 8: Schreib die MITTLEREN Saetze (nicht Satz 1, nicht den letzten) so um, dass die Geschichte fluessig
+durchlaeuft: Bruecken wie "Das Problem:", "Und dann", "Deshalb", "Aber", Reihenfolge aendern, Bezugswoerter klarstellen,
+unnoetige Saetze streichen. KEINE neuen Fakten, keine Zahlen aendern, kurze Saetze (max. 12 Woerter) behalten,
+Gesamtzahl der Saetze darf um hoechstens 2 sinken. Jeder Satz behaelt seine Nummer ("nr") aus dem Original,
+damit die Bilder passen; neue Bruecken-Saetze bekommen die Nummer des Satzes, an den sie anschliessen.
+
+Antworte NUR mit JSON: {{"punkte": 1-10, "probleme": ["..."],
+"saetze": [{{"nr": 1, "text": "..."}}, ...]  (nur wenn punkte < 8, sonst leere Liste)}}"""
+    try:
+        urteil, modell = ki(prompt, temperatur=0.3)
+    except Exception as e:
+        log(f"Roter-Faden-Check uebersprungen: {e}")
+        return daten
+    try:
+        punkte = int(urteil.get("punkte", 10))
+    except (TypeError, ValueError):
+        punkte = 10
+    daten["_roter_faden"] = punkte
+    neu = [x for x in urteil.get("saetze") or [] if isinstance(x, dict) and str(x.get("text", "")).strip()]
+    if punkte >= 8 or len(neu) < len(szenen) - 2:
+        log(f"Roter Faden ({modell}): {punkte}/10 ✅")
+        return daten
+    erster, letzter = szenen[0], szenen[-1]
+    mitte = []
+    for x in neu:
+        try:
+            nr = max(1, min(len(szenen), int(x.get("nr", 0)))) - 1
+        except (TypeError, ValueError):
+            continue
+        if nr in (0, len(szenen) - 1):
+            continue                               # Catch + Loop bleiben, wie sie sind
+        vorlage = dict(szenen[nr])
+        vorlage["text"] = str(x["text"]).strip()
+        mitte.append(vorlage)
+    if len(mitte) < len(szenen) - 4:
+        log(f"Roter Faden: Umbau unbrauchbar, behalte Original ({punkte}/10)")
+        return daten
+    daten["szenen"] = [erster] + mitte + [letzter]
+    log(f"Roter Faden ({modell}): {punkte}/10 -> geglaettet ({'; '.join(map(str, urteil.get('probleme', [])))[:150]})")
     return daten
 
 
@@ -2615,6 +2684,8 @@ def _github_pages(video):
     try:
         subprocess.run(["git", "clone", "--depth", "1", "--branch", "main", repo, str(ordner)], check=True, capture_output=True, text=True)
         shutil.rmtree(ordner / "v", ignore_errors=True)
+        for alt in ordner.glob("d-*.html"):          # alte statische Dashboards entfernen (jetzt live im Tuersteher)
+            alt.unlink()
         (ordner / "v").mkdir()
         name = f"{uuid.uuid4().hex[:12]}.mp4"
         shutil.copy(video, ordner / "v" / name)
@@ -2732,7 +2803,12 @@ def instagram_hochladen(video, daten):
     raise RuntimeError("Instagram-Upload fehlgeschlagen: " + " | ".join(fehler))
 
 
+STORY_AN = None                        # wird in modus_pruefen aus dem aktuellen Status gesetzt
+
+
 def story_an():
+    if STORY_AN is not None:
+        return STORY_AN
     try:
         return json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("story", True)
     except Exception:
@@ -2784,6 +2860,7 @@ def erstelle_video():
             benutzt.add(titel)
             kandidat = skript_erstellen(titel)
             kandidat = hook_und_loop(kandidat)
+            kandidat = roter_faden(kandidat)
             log(f"Skript fertig: {kandidat['titel']} – pruefe Fakten ...")
             ok, ergebnis = faktencheck(kandidat)
             for runde in range(1, 4):
@@ -2973,7 +3050,12 @@ def modus_erstellen():
     if eintrag.get("status") in ("wartet", "freigegeben", "gepostet"):
         log(f"Fuer {slot} gibt es schon ein Video ({eintrag['status']}) – nichts zu tun.")
         return
-    global WUNSCH_THEMA
+    global WUNSCH_THEMA, TEIL2, ANDERS_ALS
+    if not WUNSCH_THEMA and eintrag.get("wunsch"):          # "Neu machen" nach /thema: beim Wunschthema bleiben
+        WUNSCH_THEMA = eintrag["wunsch"]
+        TEIL2 = WUNSCH_THEMA.endswith(" TEIL2")
+        log(f"Neu machen – bleibe beim Wunschthema: {WUNSCH_THEMA}")
+    ANDERS_ALS = list(eintrag.get("verworfen", []))
     aus_warteschlange = None
     if not extra and not WUNSCH_THEMA:
         schlange = ideen_laden()["warteschlange"]
@@ -3011,7 +3093,8 @@ def modus_erstellen():
     st["slots"][slot] = {"status": "freigegeben" if auto else "wartet", "auto": auto,
                          "run_id": os.environ.get("GITHUB_RUN_ID", ""),
                          "message_id": msg, "titel": daten["titel"], "thema": daten.get("thema", ""), "extra": extra,
-                         "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat()}
+                         "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat(),
+                         "wunsch": WUNSCH_THEMA, "verworfen": ANDERS_ALS}
     status_speichern(st)
     log(f"FERTIG: Video fuer {slot} {'automatisch freigegeben (Auto-Modus)' if auto else 'wartet auf Freigabe'}")
 
@@ -3068,6 +3151,8 @@ def modus_pruefen():
         aktion_verarbeiten(st, aktion, slot, cb_id=cb["id"])
 
     # 2) Faellige Videos posten, verfallene melden, Erinnerungen
+    global STORY_AN
+    STORY_AN = bool(st.get("story", True))       # immer der allerneueste Schalter-Stand
     for slot, eintrag in sorted(st["slots"].items()):
         zeit = slot_zeit(slot)
         if eintrag.get("status") == "freigegeben" and (eintrag.get("sofort") or jetzt() >= zeit - timedelta(minutes=5)):
@@ -3135,9 +3220,7 @@ def modus_pruefen():
     except Exception as e:
         log(f"Kommentare: {e}")
     try:
-        _, neu_notiert = verlauf_merken()
-        if neu_notiert and st.get("dashboard"):
-            dashboard_hochladen(st)
+        verlauf_merken()                          # Dashboard ist jetzt live (Cloudflare-Tuersteher /dashboard)
     except Exception as e:
         log(f"Verlauf/Dashboard: {e}")
 
@@ -3250,12 +3333,12 @@ def punkte(stats):
 
 
 def stats_aktualisieren(erzwingen=False):
-    """Holt frische Zahlen fuer alle Videos der letzten 30 Tage (hoechstens alle 12 h, ausser erzwungen)."""
+    """Holt frische Zahlen fuer alle Videos der letzten 30 Tage (hoechstens stuendlich, ausser erzwungen)."""
     archiv = archiv_laden()
     grenze = jetzt() - timedelta(days=30)
     aktiv = [v for v in archiv if datetime.fromisoformat(v["gepostet"]) > grenze]
     faellig = [v for v in aktiv if erzwingen or not v.get("stats_am")
-               or jetzt() - datetime.fromisoformat(v["stats_am"]) > timedelta(hours=12)]
+               or jetzt() - datetime.fromisoformat(v["stats_am"]) > timedelta(minutes=50)]
     geaendert = False
     for v in archiv:                              # YouTube-Richtlinie: API-Daten nicht laenger als 30 Tage aufheben
         if datetime.fromisoformat(v["gepostet"]) <= grenze and any(k.startswith("yt_") for k in v.get("stats", {})):
@@ -4060,11 +4143,12 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
             return
         eintrag["status"] = "verworfen"
         eintrag["neu_gemacht"] = eintrag.get("neu_gemacht", 0) + 1
+        eintrag["verworfen"] = (eintrag.get("verworfen") or []) + [f"{eintrag.get('titel', '')} ({eintrag.get('thema', '')})"]
         antwort("❌ Verworfen – ich mache ein neues!")
         tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
            reply_markup=json.dumps({"inline_keyboard": [[{"text": "❌ Verworfen", "callback_data": "x"}]]}))
         status_speichern(st)                      # damit der neue Lauf den Status sieht
-        if _neu_starten(slot):
+        if _neu_starten(slot, eintrag.get("wunsch") or ""):
             if not vom_tuersteher:                # der Tuersteher hat das schon bestaetigt
                 telegram_text(f"🔄 Baue ein neues Video für {uhr} Uhr. Kommt in ca. 10–15 Minuten.")
         else:
