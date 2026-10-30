@@ -1,0 +1,55 @@
+name: Einstellung
+
+# Schneller Ablauf nur fuer Schalter und Regler (Auto-Modus, Pause, Story, Musik, Stimme ...).
+# Hat eine eigene Warteschlange und wartet deshalb nie auf einen laufenden Video-Bau.
+on:
+  workflow_dispatch:
+    inputs:
+      aktion:
+        description: "z. B. auto_an, story, musik"
+        required: true
+      slot:
+        description: "Wert, z. B. an / aus / leiser / 5 / Orus"
+        required: false
+        default: "-"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: faktenfieber-einstellung
+  cancel-in-progress: false
+
+jobs:
+  einstellung:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Code holen
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Einstellung setzen
+        env:
+          AKTION: ${{ github.event.inputs.aktion }}
+          AKTION_SLOT: ${{ github.event.inputs.slot }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
+          YT_SICHTBARKEIT: ${{ vars.YT_SICHTBARKEIT || 'private' }}
+        run: |
+          pip install -q requests
+          python faktenfieber.py einstellung
+
+      - name: Speichern
+        run: |
+          git config user.name "faktenfieber-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/einstellungen.json
+          git commit -m "Einstellung: ${{ github.event.inputs.aktion }}" || exit 0
+          for i in 1 2 3 4 5; do
+            git pull --rebase -q && git push && exit 0
+            sleep 5
+          done
+          exit 1
