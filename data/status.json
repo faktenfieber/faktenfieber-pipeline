@@ -116,7 +116,7 @@
    }
   },
   "2026-10-29 11:54": {
-   "status": "wartet",
+   "status": "verfallen",
    "run_id": "40861090170",
    "message_id": 121,
    "titel": "Vom Baby zur Millioeninfluencerin in 3 Jahren",
@@ -126,7 +126,7 @@
    "erstellt": "2026-10-29T12:01:54.459191+01:00"
   },
   "2026-10-29 15:00": {
-   "status": "wartet",
+   "status": "verfallen",
    "run_id": "40887112639",
    "message_id": 125,
    "titel": "Warum das iPhone SE 2022 teurer ist als du denkst",
@@ -154,7 +154,7 @@
    "gepostet_um": "2026-10-29T17:27:38.052885+01:00"
   },
   "2026-10-29 16:31": {
-   "status": "wartet",
+   "status": "verfallen",
    "run_id": "40902260399",
    "message_id": 135,
    "titel": "Katja Gloger: Von Moskau bis Washington – Die Journalistin, die die Welt bewegte",
@@ -215,12 +215,12 @@
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
  "max_schwierigkeit": 7.0,
- "token_check": "2026-10-29",
- "kommentare_check": "2026-10-29T23:29:08.932697+01:00",
+ "token_check": "2026-10-30",
+ "kommentare_check": "2026-10-30T07:05:53.987442+01:00",
  "ig_name": "faktenfieber.official",
  "kommentare_gesehen": [],
  "antworten": {},
  "ki_bilder": true,
  "dashboard": "d-c98165fa40",
- "dashboard_am": "2026-10-29T19:04:51.057054+01:00"
+ "dashboard_am": "2026-10-30T07:05:57.588201+01:00"
 }
