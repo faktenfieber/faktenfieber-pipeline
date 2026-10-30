@@ -245,5 +245,6 @@
  "cf_sync_fehler_gemeldet": true,
  "admin_pin": "c4062b5c0d80fa0e2236a2c112c941350bdfe668120b231054eb5ad4e0f3fb67",
  "admin_version": 1,
- "cf_ig_sync": "2acbd9260578"
+ "cf_ig_sync": "2acbd9260578",
+ "serie": true
 }
