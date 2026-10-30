@@ -16,12 +16,12 @@
   "stats": {
    "likes": 2,
    "kommentare": 1,
-   "aufrufe": 147,
-   "yt_aufrufe": 864,
+   "aufrufe": 148,
+   "yt_aufrufe": 881,
    "yt_likes": 12
   },
-  "punkte": 67.5,
-  "stats_am": "2026-10-30T07:25:53.999383+01:00"
+  "punkte": 68.5,
+  "stats_am": "2026-10-30T11:25:55.097167+01:00"
  },
  {
   "slot": "2026-10-29 23:22",
@@ -38,12 +38,14 @@
   "run_id": "40966213713",
   "dauer": 32.6,
   "stats": {
-   "likes": 0,
+   "likes": 4,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 180,
+   "yt_aufrufe": 237,
+   "yt_likes": 7
   },
-  "punkte": 3.0,
-  "stats_am": "2026-10-29T23:48:35.653920+01:00"
+  "punkte": 34.9,
+  "stats_am": "2026-10-30T11:25:55.538694+01:00"
  },
  {
   "slot": "2026-10-30 08:00",
@@ -60,13 +62,13 @@
   "run_id": "41003302264",
   "dauer": 36.8,
   "stats": {
-   "likes": 0,
+   "likes": 1,
    "kommentare": 1,
-   "aufrufe": 0,
-   "yt_aufrufe": 0,
-   "yt_likes": 0
+   "aufrufe": 155,
+   "yt_aufrufe": 282,
+   "yt_likes": 4
   },
-  "punkte": 3.0,
-  "stats_am": "2026-10-30T08:44:30.584176+01:00"
+  "punkte": 29.9,
+  "stats_am": "2026-10-30T11:25:55.876758+01:00"
  }
 ]
