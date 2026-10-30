@@ -202,7 +202,7 @@
    "gepostet_um": "2026-10-29T23:48:34.614415+01:00"
   },
   "2026-10-30 08:00": {
-   "status": "wartet",
+   "status": "gepostet",
    "auto": false,
    "run_id": "41003302264",
    "message_id": 172,
@@ -211,7 +211,13 @@
    "extra": false,
    "neu_gemacht": 0,
    "erstellt": "2026-10-30T05:39:37.511020+01:00",
-   "erinnert": true
+   "erinnert": true,
+   "links": {
+    "youtube": "https://youtube.com/shorts/MmyfT5bqHqs",
+    "instagram": "https://www.instagram.com/reel/DfHEpyQjjGD/"
+   },
+   "ig_media_id": "18099266390111272",
+   "gepostet_um": "2026-10-30T08:44:29.398230+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
