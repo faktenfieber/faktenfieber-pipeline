@@ -618,6 +618,65 @@ def trend_kandidaten(benutzt, anzahl=8):
     return titel[:anzahl]
 
 
+def trend_alarm(st):
+    """Einmal am Tag: Themen, die gestern ploetzlich explodiert sind (viel mehr Leser als sonst), mit Knopf
+    'Video bauen' an Telegram. Keine Todesfaelle, keine frischen Ungluecke mit Opfern, keine Politik-Hetze."""
+    heute = jetzt().date().isoformat()
+    if st.get("trend_alarm_tag") == heute or jetzt().hour < 7:
+        return
+    st["trend_alarm_tag"] = heute
+    tag = (datetime.utcnow() - timedelta(days=1)).strftime("%Y/%m/%d")
+    try:
+        r = requests.get(f"https://wikimedia.org/api/rest_v1/metrics/pageviews/top/de.wikipedia/all-access/{tag}",
+                         headers=WIKI_HEADERS, timeout=30)
+        top = [(a["article"].replace("_", " "), a["views"]) for a in r.json()["items"][0]["articles"][:60]]
+    except Exception as e:
+        log(f"Trend-Alarm: keine Daten ({e.__class__.__name__})")
+        return
+    benutzt = set(lade_benutzte())
+    top = [(t, v) for t, v in top if v >= 20000 and not TREND_AUSSCHLUSS.search(t) and not schon_benutzt(t, benutzt)
+           and t not in st.get("trends_gemeldet", [])][:25]
+    if not top:
+        return
+    normal = beliebtheit([t for t, _ in top])
+    personen = sind_personen([t for t, _ in top])
+    explodiert = [(t, v, normal.get(t) or 0) for t, v in top
+                  if t not in personen and v >= 8 * max(normal.get(t) or 0, 300)]
+    if not explodiert:
+        log("Trend-Alarm: nichts Explosives gestern")
+        return
+    liste = "\n".join(f"- {t}: gestern {v:,} Leser (sonst ~{n:,}/Tag)".replace(",", ".") for t, v, n in explodiert[:12])
+    try:
+        wahl, _ = ki(f"""Du bist Redakteur eines deutschen Fakten-Shorts-Kanals (unterhaltsame, wahre Hintergruende).
+Diese Wikipedia-Artikel sind gestern ploetzlich explodiert:
+{liste}
+
+Waehle hoechstens 2, zu denen ein spannendes 50-Sekunden-Video mit ueberraschenden HINTERGRUND-Fakten moeglich ist
+(z. B. Geschichte hinter einem Film/Spiel/Ereignis/Ort/Phaenomen). VERBOTEN: Todesfaelle, frische Ungluecke oder
+Anschlaege mit Opfern, Kriminalfaelle mit echten Opfern, Wahlen/Parteien/Politiker, reine Promi-News, Sport-Ergebnisse.
+Wenn nichts passt: leere Liste.
+
+Antworte NUR mit JSON: {{"themen": [{{"titel": "exakter Titel aus der Liste", "idee": "worum es im Video ginge, 1 Satz"}}]}}""",
+                     temperatur=0.3)
+    except Exception as e:
+        log(f"Trend-Alarm: KI nicht erreichbar ({e})")
+        return
+    namen = {t: (v, n) for t, v, n in explodiert}
+    for th in (wahl.get("themen") or [])[:2]:
+        titel = th.get("titel", "")
+        if titel not in namen:
+            continue
+        v, n = namen[titel]
+        st.setdefault("trends_gemeldet", []).append(titel)
+        knopf = titel.encode("utf-8")[:55].decode("utf-8", "ignore")
+        tg("sendMessage", chat_id=TG_CHAT,
+           text=f"🔥 TREND-ALARM\n„{titel}“ ist gestern explodiert: {v:,} Leser statt sonst ~{n:,} am Tag.\n".replace(",", ".")
+                + f"\n💡 Video-Idee: {th.get('idee', '')}\n\nJetzt draufspringen, solange alle danach suchen?",
+           reply_markup=json.dumps({"inline_keyboard": [[{"text": "🔥 Ja, Video bauen", "callback_data": f"trend|{knopf}"},
+                                                         {"text": "🙅 Nein", "callback_data": "nein|trend"}]]}))
+    st["trends_gemeldet"] = st.get("trends_gemeldet", [])[-60:]
+
+
 IDEEN_DATEI = ROOT / "data" / "ideen.json"
 
 
@@ -1219,7 +1278,7 @@ SKALA = ("4 = sehr leicht, wie ein Gespräch unter Freunden\n"
 def aktuelle_grenze():
     """Grenze aus dem gespeicherten Status (per /schwierigkeit gesetzt), sonst Standard."""
     try:
-        wert = float(json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("max_schwierigkeit"))
+        wert = float(einstellung("max_schwierigkeit"))
         return max(SCHWIERIGKEIT_MIN, min(SCHWIERIGKEIT_MAX, wert))
     except Exception:
         return MAX_SCHWIERIGKEIT
@@ -1434,7 +1493,7 @@ def modus_hoerprobe():
 
 def stimme_aus_status():
     try:
-        return json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("stimme") or TTS_STIMME
+        return einstellung("stimme") or TTS_STIMME
     except Exception:
         return TTS_STIMME
 
@@ -2193,7 +2252,7 @@ def ambient_erzeugen(ziel, dauer=90):
 
 def musik_lautstaerke_aktuell():
     try:
-        return float(json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("musik_lautstaerke",
+        return float(einstellungen_alle().get("musik_lautstaerke",
                                                                                                 MUSIK_LAUTSTAERKE))
     except Exception:
         return MUSIK_LAUTSTAERKE
@@ -2234,7 +2293,7 @@ _KI_BILD_AUS = False
 
 def ki_bilder_erlaubt():
     try:
-        return json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("ki_bilder", True)
+        return einstellungen_alle().get("ki_bilder", True)
     except Exception:
         return True
 
@@ -2810,7 +2869,7 @@ def story_an():
     if STORY_AN is not None:
         return STORY_AN
     try:
-        return json.loads((ROOT / "data" / "status.json").read_text(encoding="utf-8")).get("story", True)
+        return einstellungen_alle().get("story", True)
     except Exception:
         return True
 
@@ -2939,7 +2998,20 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ZEITZONE = ZoneInfo("Europe/Vienna")
-SLOTS = [(8, 0), (12, 0), (18, 0)]               # Posting-Zeiten (bei Aenderung auch PLAN im Tuersteher anpassen!)
+STANDARD_SLOTS = ["08:00", "12:00", "18:00"]
+
+
+def _slots_laden():
+    """Posting-Zeiten: per /zeiten bzw. Admin aenderbar (data/einstellungen.json), sonst 8/12/18 Uhr.
+    Der Tuersteher liest dieselbe Datei und stellt seinen Wecker automatisch um."""
+    try:
+        liste = json.loads((ROOT / "data" / "einstellungen.json").read_text(encoding="utf-8")).get("zeiten") or STANDARD_SLOTS
+    except Exception:
+        liste = STANDARD_SLOTS
+    return [tuple(int(x) for x in t.split(":")) for t in sorted(liste)]
+
+
+SLOTS = _slots_laden()                           # Posting-Zeiten als (Stunde, Minute)
 VORLAUF = timedelta(hours=2, minutes=30)          # so frueh vor dem Termin wird das Video gebaut
 VERFALL_VOR_NAECHSTEM = timedelta(minutes=60)     # Freigabe moeglich bis 1 h vor dem naechsten Termin
 MAX_NEU = 3                                      # so oft darf pro Slot "Neu machen" gedrueckt werden
@@ -2972,11 +3044,45 @@ def naechster_slot(ab=None):
                 return kandidat.strftime("%Y-%m-%d %H:%M")
 
 
+# Einstellungen liegen in einer eigenen Datei, damit sie von einem schnellen, eigenen Ablauf (einstellung.yml)
+# geaendert werden koennen, ohne hinter einem laufenden Video-Bau warten zu muessen.
+EINSTELLUNG_DATEI = ROOT / "data" / "einstellungen.json"
+EINSTELLUNG_KEYS = ("auto", "pause", "story", "serie", "kommentare_an", "ki_bilder", "max_schwierigkeit",
+                    "musik_lautstaerke", "stimme", "zeiten", "zeit_test", "zeit_test_angebot", "zeit_richtung")
+EINSTELLUNG_BEFEHLE = ("auto_an", "auto_aus", "pause", "weiter", "story", "serie", "kommentare", "kibilder", "musik",
+                       "schwierigkeit", "voice", "zeiten")
+
+
+def einstellungen_alle():
+    """Aktuelle Einstellungen: eigene Datei, sonst (alter Stand) aus status.json."""
+    try:
+        alt = json.loads(STATUS_DATEI.read_text(encoding="utf-8"))
+    except Exception:
+        alt = {}
+    try:
+        neu = json.loads(EINSTELLUNG_DATEI.read_text(encoding="utf-8"))
+    except Exception:
+        neu = {}
+    return {**{k: alt[k] for k in EINSTELLUNG_KEYS if k in alt}, **neu}
+
+
+def einstellung(key, standard=None):
+    return einstellungen_alle().get(key, standard)
+
+
+def einstellungen_speichern(st):
+    EINSTELLUNG_DATEI.parent.mkdir(parents=True, exist_ok=True)
+    EINSTELLUNG_DATEI.write_text(json.dumps({k: st[k] for k in EINSTELLUNG_KEYS if k in st}, ensure_ascii=False,
+                                            indent=1), encoding="utf-8")
+
+
 def status_laden():
     try:
-        return json.loads(STATUS_DATEI.read_text(encoding="utf-8"))
+        st = json.loads(STATUS_DATEI.read_text(encoding="utf-8"))
     except Exception:
-        return {"tg_offset": 0, "slots": {}}
+        st = {"tg_offset": 0, "slots": {}}
+    st.update(einstellungen_alle())
+    return st
 
 
 def status_speichern(st):
@@ -2984,7 +3090,21 @@ def status_speichern(st):
     grenze = jetzt() - timedelta(days=7)
     st["slots"] = {k: v for k, v in st.get("slots", {}).items() if slot_zeit(k) > grenze}
     STATUS_DATEI.parent.mkdir(parents=True, exist_ok=True)
-    STATUS_DATEI.write_text(json.dumps(st, ensure_ascii=False, indent=1), encoding="utf-8")
+    if not EINSTELLUNG_DATEI.exists():          # einmalige Umstellung: Einstellungen in eigene Datei
+        einstellungen_speichern(st)
+    ohne = {k: v for k, v in st.items() if k not in EINSTELLUNG_KEYS}
+    STATUS_DATEI.write_text(json.dumps(ohne, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def modus_einstellung():
+    """Schneller Ablauf nur fuer Schalter/Regler (einstellung.yml) - wartet nie auf einen Video-Bau."""
+    befehl = os.environ.get("AKTION", "")
+    if befehl not in EINSTELLUNG_BEFEHLE:
+        log(f"Unbekannte Einstellung: {befehl}")
+        return
+    st = status_laden()
+    befehl_ausfuehren(st, befehl)
+    einstellungen_speichern(st)
 
 
 def tg(methode, **daten):
@@ -3135,6 +3255,8 @@ def modus_pruefen():
                   "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen", "kommentare", "kibilder",
                   "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset"):
         befehl_ausfuehren(st, befehl)
+        if befehl in EINSTELLUNG_BEFEHLE:
+            einstellungen_speichern(st)
         status_speichern(st)
         if befehl == "status":
             return
@@ -3211,6 +3333,14 @@ def modus_pruefen():
     except Exception as e:
         log(f"Token-Check: {e}")
 
+    try:
+        trend_alarm(st)
+    except Exception as e:
+        log(f"Trend-Alarm: {e}")
+    try:
+        archiv_nachtragen(st)
+    except Exception as e:
+        log(f"Nachtragen: {e}")
     try:
         stats_aktualisieren()
     except Exception as e:
@@ -3328,6 +3458,94 @@ def _yt_aufrufe(ids):
         except Exception:
             pass
     return out
+
+
+def _titel_norm(t):
+    return re.sub(r"[^a-z0-9äöüß]", "", (t or "").lower())[:40]
+
+
+def archiv_nachtragen(st):
+    """Einmalig: alle Videos, die vor dem Archiv gepostet wurden, von YouTube + Instagram nachtragen,
+    damit Lernen, Statistik und Wochen-Video von Anfang an echte Daten haben."""
+    if st.get("archiv_nachgetragen") == 1:
+        return
+    key = os.environ.get("YT_API_KEY", "")
+    archiv = archiv_laden()
+    bekannt_yt = {v.get("yt") for v in archiv if v.get("yt")}
+    bekannt_ig = {v.get("ig") for v in archiv if v.get("ig")}
+    yt_videos, ig_medien = [], []
+    if key and bekannt_yt:
+        try:
+            info = requests.get("https://www.googleapis.com/youtube/v3/videos", timeout=30, params={
+                "part": "snippet", "id": next(iter(bekannt_yt)), "key": key}).json()
+            kanal = info["items"][0]["snippet"]["channelId"]
+            uploads = "UU" + kanal[2:]
+            seite = ""
+            for _ in range(6):
+                r = requests.get("https://www.googleapis.com/youtube/v3/playlistItems", timeout=30, params={
+                    "part": "snippet", "maxResults": 50, "playlistId": uploads, "key": key, "pageToken": seite}).json()
+                for it in r.get("items", []):
+                    sn = it["snippet"]
+                    yt_videos.append({"id": sn["resourceId"]["videoId"], "titel": sn["title"], "datum": sn["publishedAt"]})
+                seite = r.get("nextPageToken")
+                if not seite:
+                    break
+        except Exception as e:
+            log(f"Nachtragen (YouTube) nicht moeglich: {e}")
+            return
+    elif not key:
+        log("Nachtragen wartet auf YT_API_KEY")
+        return
+    if IG_TOKEN:
+        try:
+            r = requests.get(f"{IG_API}/me/media", timeout=30, params={
+                "fields": "id,caption,permalink,timestamp,media_type", "limit": 100, "access_token": IG_TOKEN}).json()
+            ig_medien = [m for m in r.get("data", []) if m.get("media_type") == "VIDEO"]
+        except requests.RequestException as e:
+            log(f"Nachtragen (Instagram) nicht moeglich: {e}")
+    neu = []
+    benutzte_ig = set(bekannt_ig)
+
+    def ig_partner(titel, datum):
+        t, d = _titel_norm(titel), datetime.fromisoformat(datum.replace("Z", "+00:00"))
+        beste = None
+        for m in ig_medien:
+            if m["id"] in benutzte_ig:
+                continue
+            md = datetime.fromisoformat(m["timestamp"].replace("+0000", "+00:00"))
+            gleich = t and _titel_norm((m.get("caption") or "").split("\n")[0]).startswith(t[:25])
+            abstand = abs((md - d).total_seconds())
+            if gleich or abstand < 20 * 60:
+                if beste is None or abstand < beste[0]:
+                    beste = (abstand, m)
+        return beste[1] if beste else None
+
+    for v in yt_videos:
+        if v["id"] in bekannt_yt:
+            continue
+        m = ig_partner(v["titel"], v["datum"])
+        if m:
+            benutzte_ig.add(m["id"])
+        zeit = datetime.fromisoformat(v["datum"].replace("Z", "+00:00")).astimezone(ZEITZONE)
+        neu.append({"slot": zeit.strftime("%Y-%m-%d %H:%M"), "gepostet": zeit.isoformat(), "titel": v["titel"],
+                    "thema": v["titel"], "hook_stil": "", "stimme": "", "quelle": "", "stunde": zeit.strftime("%H"),
+                    "ig": m["id"] if m else None, "yt": v["id"], "ig_link": m.get("permalink") if m else None,
+                    "run_id": None, "nachgetragen": True, "stats": {}})
+    for m in ig_medien:
+        if m["id"] in benutzte_ig:
+            continue
+        zeit = datetime.fromisoformat(m["timestamp"].replace("+0000", "+00:00")).astimezone(ZEITZONE)
+        titel = (m.get("caption") or "").split("\n")[0][:90] or "Reel"
+        neu.append({"slot": zeit.strftime("%Y-%m-%d %H:%M"), "gepostet": zeit.isoformat(), "titel": titel, "thema": titel,
+                    "hook_stil": "", "stimme": "", "quelle": "", "stunde": zeit.strftime("%H"), "ig": m["id"], "yt": None,
+                    "ig_link": m.get("permalink"), "run_id": None, "nachgetragen": True, "stats": {}})
+    if neu:
+        archiv = sorted(archiv + neu, key=lambda v: v["gepostet"])
+        archiv_speichern(archiv)
+        stats_aktualisieren(erzwingen=True)
+        telegram_text(f"📚 {len(neu)} ältere Videos ins Gedächtnis nachgetragen – Lernen und Statistik "
+                      f"nutzen jetzt alle {len(archiv)} Videos.")
+    st["archiv_nachgetragen"] = 1
 
 
 def punkte(stats):
@@ -3496,9 +3714,73 @@ def statistik_senden(st, wochenbericht=False):
     if wochenbericht:
         ki_tipps(archiv)
         try:
+            zeiten_vorschlag(st, archiv)
+        except Exception as e:
+            log(f"Zeiten-Vorschlag: {e}")
+        try:
             ziel_senden()
         except Exception as e:
             log(f"Ziel im Wochenbericht: {e}")
+
+
+def zeiten_vorschlag(st, archiv):
+    """Sonntags: welche Uhrzeit laeuft schlechter? -> 1 Woche lang eine Stunde verschoben testen (nur mit Okay per Knopf).
+    Laeuft ein Test, wird er ausgewertet: besser -> behalten, schlechter -> zurueck."""
+    zeiten = [f"{h:02d}:{m:02d}" for h, m in SLOTS]
+    grenze = jetzt() - timedelta(days=21)
+    mit = [v for v in archiv if v.get("punkte") is not None and datetime.fromisoformat(v["gepostet"]) > grenze]
+
+    def schnitt(zeit, seit=None):
+        werte = [v["punkte"] for v in mit if v.get("slot", "")[11:16] == zeit
+                 and (not seit or v["gepostet"][:10] >= seit)]
+        return (sum(werte) / len(werte), len(werte)) if werte else (None, 0)
+
+    def knoepfe(neu_liste, ja, nein):
+        return json.dumps({"inline_keyboard": [[{"text": ja, "callback_data": f"zeiten|{','.join(neu_liste)}"},
+                                                {"text": nein, "callback_data": "nein|trend"}]]})
+    test = st.get("zeit_test")
+    if test:
+        neu_s, n = schnitt(test["neu"], seit=test["start"])
+        if n < 5:
+            return                                 # Test laeuft noch
+        alt_s = test.get("alt_schnitt") or 0
+        st.pop("zeit_test", None)
+        einstellungen_speichern(st)
+        if alt_s and neu_s >= alt_s * 1.1:
+            telegram_text(f"🗓 ZEIT-TEST AUSGEWERTET: {test['neu']} Uhr lief {round((neu_s / alt_s - 1) * 100)} % besser als "
+                          f"{test['alt']} Uhr ({n} Videos). Die neue Zeit bleibt. 🎉")
+        else:
+            zurueck = sorted([test["alt"] if z == test["neu"] else z for z in zeiten])
+            tg("sendMessage", chat_id=TG_CHAT, text=f"🗓 ZEIT-TEST AUSGEWERTET: {test['neu']} Uhr war nicht besser als "
+               f"{test['alt']} Uhr ({n} Videos). Zurück zur alten Zeit?",
+               reply_markup=knoepfe(zurueck, f"↩️ Zurück zu {test['alt']}", "Neue Zeit behalten"))
+        return
+    werte = {z: schnitt(z) for z in zeiten}
+    gut = {z: w for z, (w, n) in werte.items() if n >= 4}
+    if len(gut) < 2:
+        return                                     # noch zu wenig Daten
+    beste = max(gut, key=gut.get)
+    schwach = min(gut, key=gut.get)
+    if gut[schwach] > gut[beste] * 0.7:
+        return                                     # Unterschied zu klein, alles gut
+    richtung = 1 if st.get("zeit_richtung", -1) < 0 else -1
+    st["zeit_richtung"] = richtung
+    einstellungen_speichern(st)
+    h = int(schwach[:2]) + richtung
+    neu = f"{h:02d}:{schwach[3:]}"
+    vorschlag = sorted([neu if z == schwach else z for z in zeiten])
+    minuten = [int(t[:2]) * 60 + int(t[3:]) for t in vorschlag]
+    if not (6 <= h <= 23) or any(b - a < 180 for a, b in zip(minuten, minuten[1:])):
+        return
+    st["zeit_test_angebot"] = {"alt": schwach, "neu": neu, "alt_schnitt": gut[schwach]}
+    einstellungen_speichern(st)
+    tg("sendMessage", chat_id=TG_CHAT,
+       text=f"🗓 UHRZEIT-CHECK (letzte 3 Wochen)\n" + "\n".join(
+           f"{'🏆' if z == beste else '🐢' if z == schwach else '•'} {z} Uhr: Ø {w:.0f} Punkte ({werte[z][1]} Videos)"
+           for z, w in sorted(gut.items())) +
+       f"\n\n{schwach} Uhr läuft {round((1 - gut[schwach] / gut[beste]) * 100)} % schlechter als {beste} Uhr. "
+       f"Vorschlag: eine Woche lang {neu} statt {schwach} testen – danach werte ich automatisch aus.",
+       reply_markup=knoepfe(vorschlag, f"✅ {neu} testen", "Nein, so lassen"))
 
 
 def ki_tipps(archiv):
@@ -3951,7 +4233,7 @@ def befehl_ausfuehren(st, befehl):
                       f"📲 Auto-Story: {'an' if st.get('story', True) else 'aus'}\n"
                       f"🎨 KI-Illustrationen: {'an' if st.get('ki_bilder', True) else 'aus'}\n"
                       f"📊 Dashboard: {'an' if st.get('dashboard') else 'aus'}\n"
-                      f"🗓 Termine: {', '.join(f'{h:02d}:{m:02d}' for h, m in SLOTS)}\n"
+                      f"🗓 Termine: {', '.join(f'{h:02d}:{m:02d}' for h, m in SLOTS)} (ändern: /zeiten)\n"
                       f"▶️ YouTube: {'öffentlich' if os.environ.get('YT_SICHTBARKEIT') == 'public' else 'privat (Audit offen)'}\n\n"
                       "Ändern: /auto · /pause · /voice · /musik · /schwierigkeit · /serie · /kommentare · /kibilder · /dashboard")
         return
@@ -3973,6 +4255,33 @@ def befehl_ausfuehren(st, befehl):
         telegram_text(f"🎨 KI-Illustrationen sind {'AN' if st.get('ki_bilder', True) else 'AUS'}. Sie springen nur ein, "
                       f"wenn es keine echten Bilder/Clips gibt, und sind immer als „KI-Illustration“ gekennzeichnet. "
                       f"Funktioniert nur mit Gemini-Abrechnung (sonst wird es automatisch übersprungen).")
+        return
+    if befehl == "zeiten":
+        roh = os.environ.get("AKTION_SLOT", "").replace(";", ",").replace(" ", ",")
+        aktuell = st.get("zeiten") or STANDARD_SLOTS
+        roh_zeiten = re.findall(r"\b(\d{1,2})[:.](\d{2})\b", roh)
+        zeiten = sorted({f"{int(h):02d}:{int(m):02d}" for h, m in roh_zeiten
+                         if 6 <= int(h) <= 23 and int(m) < 60 and int(m) % 5 == 0})
+        if roh_zeiten and len(zeiten) != len({f"{int(h):02d}:{m}" for h, m in roh_zeiten}):
+            telegram_text("⚠️ Ungültige Uhrzeit: bitte zwischen 06:00 und 23:55 und in 5-Minuten-Schritten (z. B. 19:05).")
+            return
+        if not zeiten:
+            telegram_text(f"🗓 Deine Posting-Zeiten: {', '.join(aktuell)} Uhr\nÄndern z. B.: /zeiten 08:00 12:00 19:00\n"
+                          "(1–4 Zeiten zwischen 6 und 23 Uhr, in 5-Minuten-Schritten, mindestens 3 Stunden Abstand)")
+            return
+        minuten = [int(t[:2]) * 60 + int(t[3:]) for t in zeiten]
+        if len(zeiten) > 4 or any(b - a < 180 for a, b in zip(minuten, minuten[1:])):
+            telegram_text("⚠️ Bitte 1–4 Zeiten mit mindestens 3 Stunden Abstand (jedes Video wird 2,5 h vorher gebaut).")
+            return
+        st["zeiten"] = zeiten
+        angebot = st.pop("zeit_test_angebot", None)
+        if angebot and angebot["neu"] in zeiten and angebot["alt"] not in zeiten:
+            st["zeit_test"] = {**angebot, "start": jetzt().date().isoformat()}
+        test = st.get("zeit_test")
+        if test and test.get("neu") not in zeiten:
+            st.pop("zeit_test", None)
+        telegram_text(f"🗓 Posting-Zeiten: {', '.join(aktuell)} → {', '.join(zeiten)} Uhr. Der Wecker stellt sich "
+                      f"automatisch um. Gilt ab dem nächsten Video (schon gebaute Videos behalten ihren Termin).")
         return
     if befehl == "admin_pin":
         wert = os.environ.get("AKTION_SLOT", "").strip()
@@ -4309,7 +4618,7 @@ if __name__ == "__main__":
         modus = sys.argv[1] if len(sys.argv) > 1 else "test"
         {"test": main, "erstellen": modus_erstellen, "pruefen": modus_pruefen, "noetig": modus_noetig,
          "status": lambda: befehl_ausfuehren(status_laden(), os.environ.get("AKTION") or "status"),
-         "hoerprobe": modus_hoerprobe, "wochenvideo": modus_wochenvideo}[modus]()
+         "hoerprobe": modus_hoerprobe, "wochenvideo": modus_wochenvideo, "einstellung": modus_einstellung}[modus]()
     except SystemExit as e:
         if e.code not in (0, None):
             telegram_text(f"❌ Faktenfieber: Kein Video erstellt.\n{e.code}")
