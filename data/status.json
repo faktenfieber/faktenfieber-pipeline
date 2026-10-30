@@ -237,7 +237,7 @@
    "gepostet_um": "2026-10-30T11:58:08.569629+01:00"
   },
   "2026-10-30 18:00": {
-   "status": "wartet",
+   "status": "freigegeben",
    "auto": false,
    "run_id": "41072166626",
    "message_id": 215,
@@ -252,7 +252,7 @@
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
  "token_check": "2026-10-30",
- "kommentare_check": "2026-10-30T11:25:55.877229+01:00",
+ "kommentare_check": "2026-10-30T15:37:36.346795+01:00",
  "ig_name": "faktenfieber.official",
  "kommentare_gesehen": [],
  "antworten": {},
