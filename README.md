@@ -55,7 +55,9 @@ Freigabe **nach** dem Termin → wird sofort gepostet. Ohne ✅ wird nichts gepo
 | `/kibilder an` · `aus` | gekennzeichnete KI-Illustrationen als Notlösung (nur mit Gemini-Abrechnung) |
 | **Wachstum** | |
 | `/ziel` | wie weit bis zur Monetarisierung – Fortschrittsbalken + Prognose in Tagen |
-| `/dashboard` · `/dashboard neu` · `aus` | eigene Statistik-Seite (täglich aktualisiert) |
+| `/dashboard` | Live-Statistik (jede Minute, YouTube + Instagram, alle Videos) |
+| `/admin` · `/admin neu` | Admin-Dashboard mit 4-stelliger PIN (alle Einstellungen per Klick) / Zugang zurücksetzen |
+| `/zeiten 08:00 12:00 19:00` | Posting-Zeiten ändern (Wecker stellt sich automatisch um) |
 | `/wochenvideo` | Top-5-Video der Woche sofort bauen (läuft sonst So 10:00 automatisch) |
 | **Info** | |
 | `/status` · `/stats` · `/einstellungen` · `/hilfe` | Überblick |
@@ -88,6 +90,9 @@ Freigabe **nach** dem Termin → wird sofort gepostet. Ohne ✅ wird nichts gepo
 | 📊 `/dashboard` | Statistik-Seite mit Kurve, Zielbalken und allen Videos |
 | 📺 Themen-Tage | feste Serien für Wiedererkennung (`/serie an`) |
 | 🧠 KI-Wochentipps | jeden Sonntag 3 Tipps + 3 Themenvorschläge zum Kopieren |
+| 🔥 Trend-Alarm | jeden Morgen: explodierte Themen mit Knopf „Video bauen“ |
+| 🗓 Uhrzeit-Test | sonntags: schwache Uhrzeit wird (mit deinem Okay) 1 Woche verschoben getestet und ausgewertet |
+| 🔐 Admin-Dashboard | alles per Klick steuern, mit PIN |
 
 ---
 
@@ -155,5 +160,6 @@ Token neu erzeugen → Secret `IG_ACCESS_TOKEN` ersetzen.
 | `.github/workflows/stimme.yml` | Hörproben für `/voice test` |
 | `.github/workflows/testvideo.yml` | Testvideo nur an Telegram |
 | `.github/workflows/wochenvideo.yml` | Top-5-Wochen-Video (Sonntag) |
+| `.github/workflows/einstellung.yml` | Schalter & Regler – schnell, wartet nie auf einen Video-Bau |
 | `data/` | Gedächtnis: benutzte Themen, Status, Ideen, Archiv + Statistik, Verlauf, Musik (nicht von Hand ändern) |
 | Cloudflare-Worker `faktenfieber-bot` | Telegram-Türsteher + minutengenauer Wecker |
