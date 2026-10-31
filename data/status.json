@@ -315,6 +315,19 @@
    },
    "ig_media_id": "18063839513631865",
    "gepostet_um": "2026-10-31T07:57:53.621649+01:00"
+  },
+  "2026-10-31 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41184896751",
+   "message_id": 277,
+   "titel": "Kältester Ort der Erde – −89,2 °C",
+   "thema": "Wostok-Station",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-31T09:36:07.058330+01:00",
+   "wunsch": "Der kälteste Ort der Welt",
+   "verworfen": []
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
