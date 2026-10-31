@@ -298,7 +298,7 @@
    "gepostet_um": "2026-10-30T20:39:24.877818+01:00"
   },
   "2026-10-31 08:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "auto": true,
    "run_id": "41168857462",
    "message_id": 272,
@@ -308,7 +308,13 @@
    "neu_gemacht": 0,
    "erstellt": "2026-10-31T05:41:22.796466+01:00",
    "wunsch": "Die tiefste Stelle der Erde",
-   "verworfen": []
+   "verworfen": [],
+   "links": {
+    "youtube": "https://youtube.com/shorts/AM9aeZdeTO0",
+    "instagram": "https://www.instagram.com/reel/DfJkJ3_FOa5/"
+   },
+   "ig_media_id": "18063839513631865",
+   "gepostet_um": "2026-10-31T07:57:53.621649+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
