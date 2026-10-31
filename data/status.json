@@ -336,7 +336,7 @@
    "gepostet_um": "2026-10-31T11:58:38.080177+01:00"
   },
   "2026-10-31 18:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "auto": true,
    "run_id": "41210455986",
    "message_id": 280,
@@ -346,7 +346,13 @@
    "neu_gemacht": 0,
    "erstellt": "2026-10-31T15:40:14.362278+01:00",
    "wunsch": "Die größte Explosion der Geschichte",
-   "verworfen": []
+   "verworfen": [],
+   "links": {
+    "youtube": "https://youtube.com/shorts/eqH2DXOZUhY",
+    "instagram": "https://www.instagram.com/reel/DfKo3ArgLNt/"
+   },
+   "ig_media_id": "18081590903736442",
+   "gepostet_um": "2026-10-31T17:58:12.122923+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
