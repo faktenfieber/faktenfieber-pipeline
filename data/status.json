@@ -296,6 +296,19 @@
    },
    "ig_media_id": "18034867760894565",
    "gepostet_um": "2026-10-30T20:39:24.877818+01:00"
+  },
+  "2026-10-31 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41168857462",
+   "message_id": 272,
+   "titel": "12 km tiefes Erdloch",
+   "thema": "Kola-Bohrung",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-10-31T05:41:22.796466+01:00",
+   "wunsch": "Die tiefste Stelle der Erde",
+   "verworfen": []
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
