@@ -355,22 +355,24 @@
    "gepostet_um": "2026-10-31T17:58:12.122923+01:00"
   },
   "2026-10-31 19:28": {
-   "status": "wartet",
+   "status": "verworfen",
    "auto": false,
    "run_id": "41229531139",
    "message_id": 284,
    "titel": "Das Feuer, das Halloween geboren hat",
    "thema": "Samhain",
    "extra": true,
-   "neu_gemacht": 0,
+   "neu_gemacht": 1,
    "erstellt": "2026-10-31T19:32:56.995083+01:00",
    "wunsch": "halloween und der ursprung",
-   "verworfen": []
+   "verworfen": [
+    "Das Feuer, das Halloween geboren hat (Samhain)"
+   ]
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
  "token_check": "2026-10-31",
- "kommentare_check": "2026-10-31T17:05:59.932482+01:00",
+ "kommentare_check": "2026-10-31T19:33:57.112799+01:00",
  "ig_name": "faktenfieber.official",
  "kommentare_gesehen": [],
  "antworten": {},
