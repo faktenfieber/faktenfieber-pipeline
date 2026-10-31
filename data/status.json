@@ -317,7 +317,7 @@
    "gepostet_um": "2026-10-31T07:57:53.621649+01:00"
   },
   "2026-10-31 12:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "auto": true,
    "run_id": "41184896751",
    "message_id": 277,
@@ -327,7 +327,13 @@
    "neu_gemacht": 0,
    "erstellt": "2026-10-31T09:36:07.058330+01:00",
    "wunsch": "Der kälteste Ort der Welt",
-   "verworfen": []
+   "verworfen": [],
+   "links": {
+    "youtube": "https://youtube.com/shorts/8-sEXhyIsJQ",
+    "instagram": "https://www.instagram.com/reel/DfJ_sciDXBH/"
+   },
+   "ig_media_id": "18018992264946025",
+   "gepostet_um": "2026-10-31T11:58:38.080177+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
