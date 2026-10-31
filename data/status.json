@@ -355,7 +355,7 @@
    "gepostet_um": "2026-10-31T17:58:12.122923+01:00"
   },
   "2026-10-31 19:28": {
-   "status": "wartet",
+   "status": "gepostet",
    "auto": false,
    "run_id": "41230034021",
    "message_id": 287,
@@ -367,7 +367,15 @@
    "wunsch": "halloween und der ursprung",
    "verworfen": [
     "Das Feuer, das Halloween geboren hat (Samhain)"
-   ]
+   ],
+   "sofort": true,
+   "fehler": 0,
+   "links": {
+    "youtube": "https://youtube.com/shorts/LOLEo8Gxpkw",
+    "instagram": "https://www.instagram.com/reel/DfK5YcHADI0/"
+   },
+   "ig_media_id": "17887840380689790",
+   "gepostet_um": "2026-10-31T20:22:36.876377+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
