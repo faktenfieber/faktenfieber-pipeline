@@ -355,15 +355,15 @@
    "gepostet_um": "2026-10-31T17:58:12.122923+01:00"
   },
   "2026-10-31 19:28": {
-   "status": "verworfen",
+   "status": "wartet",
    "auto": false,
-   "run_id": "41229531139",
-   "message_id": 284,
-   "titel": "Das Feuer, das Halloween geboren hat",
-   "thema": "Samhain",
+   "run_id": "41230034021",
+   "message_id": 287,
+   "titel": "Wie 19 unschuldige Menschen hingen",
+   "thema": "Hexenprozesse von Salem",
    "extra": true,
    "neu_gemacht": 1,
-   "erstellt": "2026-10-31T19:32:56.995083+01:00",
+   "erstellt": "2026-10-31T19:40:36.018018+01:00",
    "wunsch": "halloween und der ursprung",
    "verworfen": [
     "Das Feuer, das Halloween geboren hat (Samhain)"
