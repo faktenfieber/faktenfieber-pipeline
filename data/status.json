@@ -397,7 +397,7 @@
    "gepostet_um": "2026-11-01T07:57:23.454777+01:00"
   },
   "2026-11-01 12:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "auto": true,
    "run_id": "41289168015",
    "message_id": 296,
@@ -407,7 +407,13 @@
    "neu_gemacht": 0,
    "erstellt": "2026-11-01T09:38:17.822157+01:00",
    "wunsch": "Wie groß ist das Universum?",
-   "verworfen": []
+   "verworfen": [],
+   "links": {
+    "youtube": "https://youtube.com/shorts/mowHqk7PZw8",
+    "instagram": "https://www.instagram.com/reel/DfMkgJ3AgIn/"
+   },
+   "ig_media_id": "18500448856100496",
+   "gepostet_um": "2026-11-01T11:58:42.433596+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
