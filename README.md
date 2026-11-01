@@ -97,6 +97,13 @@ Freigabe **nach** dem Termin → wird sofort gepostet. Ohne ✅ wird nichts gepo
 | 💛 Fan-Wünsche | Themenwünsche aus Kommentaren → Video → Fan wird genannt + bekommt automatisch eine Antwort |
 | 🔁 Teil-2-Nachfrage | fragen 2+ Leute nach mehr, kommt ein Knopf „Teil 2 bauen“ |
 | #️⃣ Fakt-Nummer | jede Folge hat eine Nummer (Fakt #57) – Sammel-Effekt |
+| 🎉 Meilensteine | 100/500/1.000 … Abos/Follower → Feier-Nachricht + Danke-Story |
+| 🧠 Quiz der Woche | sonntags 13 Uhr, 3 Fragen zu den Fakten der Woche (`/quiz an·aus·jetzt`) |
+| 📲 Fakt des Tages | jeden Abend ein Bonus-Fakt als Instagram-Story (`/faktstory an·aus`) |
+| ♻️ Hit-Recycling | alte Hits (4+ Wochen) werden als „Remastered“ vorgeschlagen |
+| 🧪 Hook-Tests | Einstiegs-Stile werden gezielt getestet, Gewinner bekommen mehr Videos |
+| 📉📈 Video-Analyse | 24 h nach dem Posten: Warum lief es gut/schlecht? Lektion wird gemerkt |
+| 📱 App-Modus | Dashboard & Admin „Zum Startbildschirm hinzufügen“ → eigene App |
 
 ---
 
