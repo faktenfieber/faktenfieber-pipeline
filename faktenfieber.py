@@ -562,20 +562,65 @@ def artikel_finden(titel):
         return None
 
 
+RAETSEL_WOERTER = re.compile(r"(theorie|verschw|mysteri|r(ae|ä)tsel|ungekl(ae|ä)r|ungel(oe|ö)st|ger(ue|ü)cht|behaupt|"
+                             r"angeblich|legende|mythos|myth|spuk|geheimnis|vertusch|wirklich passiert)", re.I)
+RAETSEL_GRENZEN = ("KEINE Theorien, die Menschen schaden koennen: nichts zu Gesundheit/Medizin/Impfungen, Wahlen, Hetze "
+                   "gegen Gruppen oder Anschuldigungen gegen echte, lebende Personen. Erlaubt: Legenden, ungeloeste Faelle, "
+                   "mysterioese Orte/Funde, beruehmte Raetsel der Geschichte und harmlose Mythen.")
+
+
+WUNSCH_FUELLWOERTER = {"der", "die", "das", "den", "dem", "des", "ein", "eine", "einen", "und", "oder", "auf", "von", "mit", "zum",
+                "zur", "aus", "bei", "fuer", "für", "über", "ueber", "uber", "thema", "video", "fakten", "fakt", "mal", "bitte",
+                "größte", "größtes", "größten", "groesste", "groesstes", "beste", "besten", "krass", "krasseste", "coolste",
+                "interessant", "interessante", "spannend", "spannende", "verrückt", "verrueckt", "unglaublich", "alles", "was",
+                "geheimnis", "geheimnisse", "geschichte", "fakten"}
+FRAGEWOERTER = ("warum", "wieso", "weshalb", "wie ", "wer ", "wann", "woher", "wozu", "stimmt es", "ob ")
+
+
+def wunsch_ist_genau(wunsch):
+    """Je genauer der Wunsch formuliert ist, desto woertlicher wird er genommen:
+    Fragen ('warum ...') und Wuensche mit 3+ inhaltlichen Woertern gelten als genau, 'Russland Geheimnis' als allgemein."""
+    import unicodedata
+    nfc = lambda t: unicodedata.normalize("NFC", t)
+    fuell = {nfc(x) for x in WUNSCH_FUELLWOERTER}
+    w = nfc(wunsch.replace(" TEIL2", "").strip().lower())
+    inhalt = [x for x in re.findall(r"[a-zäöüß0-9]+", w) if len(x) > 2 and x not in fuell]
+    return "?" in w or w.startswith(FRAGEWOERTER) or len(inhalt) >= 3
+
+
+def wiki_volltextsuche(text, anzahl=6):
+    """Artikel, in denen der Wunsch wirklich vorkommt (fuer genaue Wuensche wie 'warum die Titanic-Band weiterspielte')."""
+    try:
+        d = wiki(list="search", srsearch=text, srlimit=anzahl, srnamespace=0)
+        return {x["title"]: _ohne_html(x.get("snippet", ""))[:200] for x in d["query"]["search"]}
+    except Exception as e:
+        log(f"Volltextsuche nicht moeglich: {e}")
+        return {}
+
+
 def ideen_brainstorm(benutzt, wunsch="", anzahl=14):
     """Die KI schlaegt konkrete, wirklich spannende Geschichten vor (mit echtem Wikipedia-Artikel)."""
     zuletzt = ", ".join(list(benutzt)[-60:]) or "(keine)"
-    if wunsch:
+    if wunsch and wunsch_ist_genau(wunsch):
+        auftrag = (f'Der Kanalbetreiber will ein Video GENAU zu: "{wunsch}".\n'
+                   f"Das ist ein GENAUER Wunsch - nimm ihn WOERTLICH. Nenne die Wikipedia-Artikel, in denen GENAU dieses "
+                   f"Ereignis/diese Frage/dieses Detail behandelt wird (zuerst der passendste). Keine verwandten oder "
+                   f"\"aehnlich spannenden\" Ersatzthemen. Lieber nur 3 perfekt passende als 10 ungefaehre.")
+    elif wunsch:
         auftrag = (f'Der Kanalbetreiber will ein Video zu: "{wunsch}".\n'
-                   f"Interpretiere das wie ein Mensch, nicht woertlich. Schlage {anzahl} KONKRETE, ECHTE Geschichten, "
-                   f"Ereignisse, Orte oder Dinge vor, die genau dazu passen und die Leute WIRKLICH fesseln. "
+                   f"Der Wunsch ist allgemein - interpretiere ihn wie ein Mensch. Schlage {anzahl} KONKRETE, ECHTE "
+                   f"Geschichten, Ereignisse, Orte oder Dinge vor, die genau dazu passen und die Leute WIRKLICH fesseln. "
                    f'Beispiel: "Russland groesstes Geheimnis" -> Djatlow-Pass-Vorfall, Kola-Bohrung, Tunguska-Ereignis, '
                    f"Bernsteinzimmer, geheime Atomstaedte ... (nicht: irgendeine unbekannte Person).")
+        if RAETSEL_WOERTER.search(wunsch):
+            auftrag += f" Gemeint sind ungeloeste Raetsel, Theorien und Legenden. {RAETSEL_GRENZEN}"
     else:
         auftrag = (f"Schlage {anzahl} KONKRETE, ECHTE Themen fuer die naechsten Videos vor, bunt gemischt: "
-                   f"ca. ein Drittel Geschichte und Mysterien, ein Drittel Dinge von HEUTE (Handy, Internet, Apps, "
-                   f"Games, Marken, Essen, Sport, Technik, Raumfahrt, menschlicher Koerper), ein Drittel Natur, Tiere, "
-                   f"Rekorde und krasse Ereignisse. Nichts, was jeder schon tausendmal gehoert hat.")
+                   f"ca. ein Viertel Geschichte, ein Viertel UNGELOESTE RAETSEL, Legenden und beruehmte Theorien "
+                   f"(z. B. Voynich-Manuskript, D. B. Cooper, Wow!-Signal - Dinge, ueber die bis heute nur spekuliert wird), "
+                   f"ein Viertel Dinge von HEUTE (Handy, Internet, Apps, Games, Marken, Essen, Sport, Technik, Raumfahrt, "
+                   f"menschlicher Koerper), ein Viertel Natur, Tiere, Rekorde und krasse Ereignisse. "
+                   f"Nichts, was jeder schon tausendmal gehoert hat. {RAETSEL_GRENZEN}")
     prompt = f"""Du bist Ideen-Chef eines deutschen Shorts-Kanals mit dem Ziel, viral zu gehen.
 {auftrag}
 
@@ -763,9 +808,13 @@ def themen_pool(benutzt):
     pool = {}
     if WUNSCH_THEMA:
         pool.update({t: ("ideen", h) for t, h in ideen_brainstorm(set() if TEIL2 else benutzt, WUNSCH_THEMA, 10).items()})
-        direkt = artikel_finden(WUNSCH_THEMA)
+        wunsch_rein = WUNSCH_THEMA.replace(" TEIL2", "")
+        direkt = artikel_finden(wunsch_rein)
         if direkt and direkt not in pool:
             pool[direkt] = ("direkt", "")
+        if wunsch_ist_genau(wunsch_rein):           # genaue Wuensche: Artikel, in denen es wirklich steht
+            for t, schnipsel in wiki_volltextsuche(wunsch_rein).items():
+                pool.setdefault(t, ("suche", schnipsel))
     elif SERIE:
         log(f"Themen-Tag: {SERIE[0]}")
         pool.update({t: ("serie", h) for t, h in ideen_brainstorm(benutzt, SERIE[1], 12).items()})
@@ -834,8 +883,15 @@ def thema_waehlen(benutzt):
                         + (" [PERSON]" if v.get("person") else "")
                         + f"\n{v['hook'] + ' | ' if v['hook'] else ''}{v['intro']}"
                         for t, v in kandidaten.items())
-    wunsch = (f'\nDER KANALBETREIBER WUENSCHT SICH DAS THEMA: "{WUNSCH_THEMA}". Nimm das Thema, das diesen Wunsch '
-              f"am besten trifft UND am spannendsten ist.\n") if WUNSCH_THEMA else ""
+    wunsch = ""
+    if WUNSCH_THEMA:
+        w = WUNSCH_THEMA.replace(" TEIL2", "")
+        wunsch = (f'\nDER KANALBETREIBER WUENSCHT SICH: "{w}".\nTREFFGENAUIGKEIT GEHT VOR VIRALITAET: Nimm den Artikel, '
+                  f"der GENAU diesen Wunsch behandelt"
+                  + (" (der Wunsch ist sehr konkret - nimm ihn woertlich, keine Ersatzthemen)." if wunsch_ist_genau(w)
+                     else " (der Wunsch ist allgemein - von den passenden das spannendste).")
+                  + ' Bewerte zusaetzlich "passt" (1-10): Wie genau trifft der Artikel den Wunsch?\n'
+                  + "Personen sind erlaubt, wenn der Wunsch sie meint.\n")
     if ANDERS_ALS:
         wunsch += ("\nVERWORFEN wurde bereits: " + "; ".join(ANDERS_ALS[-3:]) + ". Nimm moeglichst einen ANDEREN Artikel "
                    "zum selben Wunsch (oder denselben nur, wenn es keinen passenden anderen gibt).\n")
@@ -867,7 +923,7 @@ ist das Thema nicht gut genug - nimm ein anderes.
 
 Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "story": "die Story in einem kurzen Satz",
 "weitererzaehlen": "Alter, wusstest du, dass ...", "unbekannte_person": true/false,
-"viral": 1-10, "verstaendlich": 1-10}}"""
+"viral": 1-10, "verstaendlich": 1-10, "passt": 1-10}}"""
     bester = None
     for runde in range(3):                         # bis zu 3 Anlaeufe, bis ein Thema den Test besteht
         wahl, _ = ki(prompt, temperatur=0.4 + 0.15 * runde)
@@ -879,14 +935,21 @@ Antworte NUR mit JSON: {{"titel": "exakter Titel aus der Liste", "story": "die S
         except (TypeError, ValueError):
             punkte = 0
         satz = str(wahl.get("weitererzaehlen", "")).strip()
-        besteht = (punkte >= 16 and len(satz) > 25 and not wahl.get("unbekannte_person")
-                   and not (kandidaten[titel].get("person") and (kandidaten[titel].get("leser") or 0) < MIN_LESER_PERSON
-                            and not WUNSCH_THEMA))
+        if WUNSCH_THEMA:                          # beim Wunsch zaehlt vor allem, ob es GENAU passt
+            try:
+                passt = int(wahl.get("passt", 10))
+            except (TypeError, ValueError):
+                passt = 10
+            punkte = passt * 3 + punkte
+            besteht = passt >= 8
+        else:
+            besteht = (punkte >= 16 and len(satz) > 25 and not wahl.get("unbekannte_person")
+                       and not (kandidaten[titel].get("person") and (kandidaten[titel].get("leser") or 0) < MIN_LESER_PERSON))
         if bester is None or (besteht, punkte) > (bester[2], bester[1]):
             bester = (titel, punkte, besteht, wahl)
         if besteht:
             break
-        log(f"Thema „{titel}“ faellt durch den Weitererzaehl-Test (viral {wahl.get('viral')}, "
+        log(f"Thema „{titel}“ faellt durch (viral {wahl.get('viral')}, passt {wahl.get('passt')}, "
             f"Person: {wahl.get('unbekannte_person')}) – suche ein besseres")
         _VERSUCHT.add(titel)
         kandidaten.pop(titel, None)
@@ -935,8 +998,15 @@ def skript_erstellen(titel):
         HOOK_ZULETZT += "\n  " + profil.replace("\n", "\n  ")
     HOOK_STILE_TEXT = "\n".join(f"  * {k}: {v}" for k, v in HOOK_STILE.items())
     titel, artikel, quellen = quellen_sammeln(titel)
-    WUNSCH_HINWEIS = (f"\n- WUNSCH DES KANALBETREIBERS: Das Video soll um \"{WUNSCH_THEMA}\" gehen. Bleib genau bei "
-                      f"diesem Thema, auch wenn der Artikel breiter ist.") if WUNSCH_THEMA else ""
+    WUNSCH_HINWEIS = ""
+    if WUNSCH_THEMA:
+        w = WUNSCH_THEMA.replace(" TEIL2", "")
+        WUNSCH_HINWEIS = (f"\n- WUNSCH DES KANALBETREIBERS (woertlich): \"{w}\".\n  Das Video muss GENAU DAS behandeln. "
+                          f"Enthaelt der Wunsch eine Frage, ein Detail, einen Aspekt oder eine Behauptung, dann ist GENAU das "
+                          f"der Kern: der Einstieg zielt darauf, das Video beantwortet/erzaehlt es, der Titel greift es erkennbar auf. "
+                          f"Alles andere aus dem Artikel nur, wenn es dafuer noetig ist. Je genauer der Wunsch, desto enger bleiben.")
+        if RAETSEL_WOERTER.search(w):
+            WUNSCH_HINWEIS += "\n  Der Wunsch zielt auf Theorien/Raetsel -> RAETSEL-MODUS (siehe unten)."
     if ANDERS_ALS:
         WUNSCH_HINWEIS += ("\n- NEU GEMACHT: Diese Version(en) wurden vom Kanalbetreiber verworfen: "
                            + "; ".join(ANDERS_ALS[-3:]) + ". Mach es deutlich ANDERS: anderer Einstieg, anderer "
@@ -1021,6 +1091,14 @@ STIL:
   "suchbegriff_en": englischer Stock-Video-Suchbegriff (2-4 Woerter), NUR wenn ein Stock-Video GENAU das
             zeigen kann, was im Satz passiert, inkl. Epoche/Ort (z. B. "medieval town street", "1930s steam train",
             "octopus swimming"). Wenn kein Stock-Video wirklich passt: null.
+- RAETSEL-MODUS (wenn das Thema ungeloest ist oder es um Theorien, Legenden, Geruechte oder Behauptungen geht):
+  * Gesicherte Fakten als Fakten erzaehlen, alles Unbewiesene KLAR als solches kennzeichnen: "Eine Theorie sagt ...",
+    "Manche glauben ...", "Angeblich ...", "Bis heute wird behauptet ...". NIE eine Behauptung als Tatsache darstellen.
+  * 2-3 Theorien gegenueberstellen (die spannendste zuletzt), ohne selbst eine als wahr zu erklaeren.
+  * Ende mit offener Frage an den Zuschauer ("Was glaubst du?") - das bringt Kommentare. Als Loop ok, wenn es passt.
+  * Auch Theorien brauchen einen Beleg: ein Zitat aus den Quellen, das zeigt, DASS es diese Theorie gibt.
+  * {RAETSEL_GRENZEN}
+  * Setze dann "modus": "raetsel", sonst "fakt".
 - Jede Faktenbehauptung einzeln auflisten, mit "beleg" = exaktes, woertliches Zitat (5-25 Woerter)
   aus einer der Quellen, das die Behauptung belegt. Copy-Paste in der ORIGINALSPRACHE (englische Zitate bleiben
   englisch, Wikidata-Zeilen genau so wie oben), kein Umformulieren, nicht uebersetzen!
@@ -1038,6 +1116,7 @@ Antworte NUR mit JSON:
   "musik_stimmung": "eins von: spannend, mysterioes, dramatisch, froehlich, episch, historisch, kurios, ruhig",
   "suchbegriff_thema": "englischer Stock-Video-Suchbegriff fuer das Thema allgemein (2-3 Woerter)",
   "hook_text": "Texteinblendung fuer die ersten Sekunden: max. 6 Woerter, der krasseste Fakt, wahr laut Artikel",
+  "modus": "fakt oder raetsel",
   "kommentar_frage": "Frage, die zum MITREDEN einlaedt (Schaetzfrage, 'Haettest du ...?', 'Was glaubst du ...?', 'Welches Thema soll als Naechstes kommen?') - keine Ja/Nein-Frage, max. 15 Woerter"
 }}"""
     daten, modell = ki(prompt, temperatur=0.8)
@@ -1156,6 +1235,60 @@ Antworte NUR mit JSON:
     beste = max((v.get("punkte", 0) for v in neu.get("hook_varianten", []) if isinstance(v, dict)), default="?")
     daten["_hook_punkte"] = beste
     log(f"Hook/Loop ({modell}): Catch {beste}/10, Loop {'ja' if daten['_loop'] else 'nein (Pointe)'}")
+    return daten
+
+
+def wunsch_check(daten):
+    """Trifft das Skript wirklich, was du dir gewuenscht hast? Wenn nicht: gezielt auf den Wunsch umschreiben."""
+    if not WUNSCH_THEMA or TEIL2:
+        return daten
+    w = WUNSCH_THEMA.replace(" TEIL2", "")
+    text = "\n".join(f"{i+1}. {s_['text']}" for i, s_ in enumerate(daten.get("szenen", [])))
+    try:
+        urteil, _ = ki(f"""Der Kanalbetreiber wollte ein Video GENAU zu: "{w}".
+Titel: {daten.get('titel')}
+Skript:
+{text}
+
+Wie genau trifft das Skript den Wunsch (1-10)? 10 = behandelt exakt das Gewuenschte als Kern. Bei einem konkreten
+Wunsch (Frage, Detail, Aspekt) zaehlt, ob GENAU das beantwortet/erzaehlt wird, nicht nur das Oberthema.
+Antworte NUR mit JSON: {{"passt": 1-10, "fehlt": "was am Wunsch fehlt oder zu kurz kommt (kurz)"}}""", temperatur=0.1)
+        passt = int(urteil.get("passt", 10))
+    except Exception as e:
+        log(f"Wunsch-Check uebersprungen: {e}")
+        return daten
+    daten["_wunsch_passt"] = passt
+    if passt >= 8:
+        log(f"Wunsch-Check: {passt}/10 ✅")
+        return daten
+    log(f"Wunsch-Check: {passt}/10 – fokussiere auf den Wunsch ({urteil.get('fehlt', '')})")
+    entwurf = {k: daten[k] for k in ("titel", "szenen", "behauptungen", "hook_text") if k in daten}
+    try:
+        neu, modell = ki(f"""Schreib dieses Short-Skript so um, dass es GENAU den Wunsch "{w}" behandelt.
+Was fehlt: {urteil.get('fehlt', '')}
+Regeln: nur Fakten aus den QUELLEN, jede Behauptung mit woertlichem Zitat als "beleg" (Originalsprache), 90-110 Woerter,
+8-12 Szenen mit je einem kurzen Satz, starker erster Satz, der direkt auf den Wunsch zielt, Titel max. 45 Zeichen ohne
+Doppelpunkt. Theorien klar als Theorien kennzeichnen. Felder "bilder" und "suchbegriff_en" pro Szene beibehalten/neu setzen.
+
+QUELLEN:
+\"\"\"{daten['_artikel']}\"\"\"
+
+AKTUELLES SKRIPT (JSON):
+{json.dumps(entwurf, ensure_ascii=False)}
+
+Antworte NUR mit dem JSON im selben Format (titel, szenen, behauptungen, hook_text).""", temperatur=0.4)
+    except Exception as e:
+        log(f"Wunsch-Fokus nicht moeglich: {e}")
+        return daten
+    if neu.get("szenen") and len(neu["szenen"]) >= 6:
+        for k in ("titel", "szenen", "behauptungen", "hook_text"):
+            if neu.get(k):
+                daten[k] = neu[k]
+        if not titel_gueltig(daten.get("titel", "")):
+            daten["titel"] = daten.get("_titel_alt") or daten["titel"][:TITEL_MAX]
+        daten["_modell"] = modell
+        daten["_wunsch_passt"] = f"{passt} → überarbeitet"
+        felder_auffuellen(daten)
     return daten
 
 
@@ -1366,6 +1499,9 @@ schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen,
 einfache Erklaerungen von Begriffen und veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen),
 sowie harmlose Vereinfachungen, die nichts Falsches behaupten (z. B. nur das Startjahr nennen, "Koenige" statt
 "Monarchen", eine Zeitspanne grob zusammenfassen).
+THEORIEN/BEHAUPTUNGEN: Sind ok, wenn sie im Sprechtext klar als Theorie/Geruecht/Behauptung gekennzeichnet sind
+("Eine Theorie sagt ...", "Manche glauben ...") UND die Quellen diese Theorie erwaehnen. Wird eine unbewiesene
+Behauptung als Tatsache erzaehlt -> "faktisch" ("als Theorie kennzeichnen").
 "faktisch" NUR, wenn eine Aussage den Quellen widerspricht oder etwas behauptet, das dort nicht steht.
 Sauber uebersetzte Fakten aus dem englischen Artikel sind korrekt.
 Melde nur echte Probleme, keine Kleinigkeiten.
@@ -1875,7 +2011,8 @@ def musik_stimmung(daten):
     """Normale Themen -> sanft, dunkle Themen (Mord, Raetsel, Katastrophe ...) -> mystisch (aber ruhig)."""
     text = " ".join(str(daten.get(k, "")) for k in ("titel", "thema", "hook_text", "musik_stimmung"))
     text += " " + " ".join(s.get("text", "") for s in daten.get("szenen", [])[:4])
-    if daten.get("musik_stimmung") in ("mysterioes", "dramatisch") or len(DUNKLE_THEMEN.findall(text)) >= 2:
+    if (daten.get("modus") == "raetsel" or daten.get("musik_stimmung") in ("mysterioes", "dramatisch")
+            or len(DUNKLE_THEMEN.findall(text)) >= 2):
         return "mystisch"
     return "sanft"
 
@@ -2575,6 +2712,10 @@ def telegram_senden(video, daten, check, dauer, knoepfe=None, kopfzeile=""):
 
     pruef = "\n".join(f"{'✅' if p.get('beleg_im_text') else '⚠️'} {p.get('behauptung')}"
                       for p in check.get("pruefung", []))
+    if daten.get("modus") == "raetsel":
+        kopfzeile += "🕵️ Rätsel-Modus: Theorien sind im Video als Theorien gekennzeichnet\n\n"
+    if daten.get("_wunsch_passt") is not None:
+        kopfzeile += f"🎯 Trifft deinen Wunsch: {daten['_wunsch_passt']}/10\n\n"
     text = (kopfzeile + f"📌 TITEL\n{daten['titel']}\n\n"
             f"🪝 EINSTIEG ({daten.get('hook_stil', '?')}, Catch {daten.get('_hook_punkte', '?')}/10)\n„{daten['szenen'][0]['text']}“\n"
             f"Einblendung: {daten.get('hook_text', '–')}\n\n"
@@ -2940,6 +3081,7 @@ def erstelle_video():
             kandidat = skript_erstellen(titel)
             kandidat = hook_und_loop(kandidat)
             kandidat = roter_faden(kandidat)
+            kandidat = wunsch_check(kandidat)
             log(f"Skript fertig: {kandidat['titel']} – pruefe Fakten ...")
             ok, ergebnis = faktencheck(kandidat)
             for runde in range(1, 4):
@@ -3453,7 +3595,7 @@ def archiv_eintragen(slot, eintrag, meta, ergebnis):
         "hook_stil": meta.get("hook_stil", ""), "stimme": meta.get("_stimme", ""), "quelle": meta.get("_quelle", ""),
         "folge": meta.get("_folge"), "fan": (meta.get("_fan") or {}).get("user"), "frage": meta.get("kommentar_frage", ""),
         "catch": meta.get("_hook_punkte"), "faden": meta.get("_roter_faden"), "serie": meta.get("_serie"),
-        "schwierigkeit": meta.get("_schwierigkeit"),
+        "schwierigkeit": meta.get("_schwierigkeit"), "modus": meta.get("modus", "fakt"),
         "stunde": slot[11:13], "ig": meta.get("_ig_media_id") or eintrag.get("ig_media_id"), "yt": yt,
         "ig_link": ergebnis.get("instagram"), "run_id": eintrag.get("run_id"), "dauer": meta.get("dauer"),
         "stats": {},
