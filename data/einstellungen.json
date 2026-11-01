@@ -2,6 +2,8 @@
  "auto": true,
  "story": false,
  "serie": true,
+ "kommentare_an": true,
  "ki_bilder": true,
- "max_schwierigkeit": 7.0
+ "max_schwierigkeit": 7.0,
+ "auto_antworten": true
 }
