@@ -1083,6 +1083,8 @@ STIL:
 - ERKLAER-PFLICHT (das Wichtigste nach dem Einstieg!):
   * Direkt nach dem Hook 1-2 Saetze Einordnung: Was ist das ueberhaupt, wo und wann? In Alltagssprache.
   * Zu jedem wichtigen Fakt das WARUM oder WIE dazu ("Das lag daran, dass ...", "Der Grund: ...", "Das heisst konkret: ...").
+    ABER: Gruende und Ursachen NUR, wenn sie in den Quellen stehen. Steht dort keine Ursache, dann erklaer stattdessen,
+    was der Fakt bedeutet ("Das heisst konkret: ..."), oder sag ehrlich, dass es unklar ist ("Warum genau, weiss bis heute niemand.").
   * Mindestens ein Vergleich, den sich jeder vorstellen kann (Groesse, Zeit, Preis, Gefuehl) - mit Zahlen aus den Quellen.
   * Am Ende muss der Zuschauer das Thema einem Freund in zwei Saetzen erklaeren koennen.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
@@ -1522,11 +1524,15 @@ def faktencheck(daten):
         alle_ok &= gefunden
     if not daten.get("behauptungen"):
         alle_ok = False
+    belegt = sum(1 for p in pruefung if p["beleg_im_text"])
     if not alle_ok:
         fehlend = [f"Zitat steht nicht im Artikel (Aussage: '{b.get('aussage', '')}', angebliches Zitat: '{b.get('beleg', '')}')"
                    for b in daten.get("behauptungen", []) if not beleg_gefunden(b.get("beleg", ""), artikel)]
-        log(f"Stufe 1: {len(fehlend)} Zitat(e) stehen NICHT in den Quellen.")
-        return False, {"pruefung": pruefung, "gesamt": "nicht_ok", "probleme": fehlend or ["Keine Behauptungen angegeben"]}
+        # Nur durchfallen, wenn weniger als 2/3 belegt sind - einzelne ungenaue Zitate prueft Stufe 2 inhaltlich
+        if not pruefung or belegt < max(2, round(len(pruefung) * 2 / 3)):
+            log(f"Stufe 1: {len(fehlend)} von {len(pruefung)} Zitat(en) stehen NICHT in den Quellen.")
+            return False, {"pruefung": pruefung, "gesamt": "nicht_ok", "probleme": fehlend or ["Keine Behauptungen angegeben"]}
+        log(f"Stufe 1: {belegt}/{len(pruefung)} Zitate belegt – Rest prueft Stufe 2 inhaltlich")
 
     # Stufe 2: Eine (moeglichst andere) KI vergleicht den Sprechtext mit dem Artikel
     sprechtext = " ".join(s["text"] for s in daten["szenen"])
@@ -1540,13 +1546,16 @@ DOPPEL-CHECK: Widersprechen sich die Quellen bei einer Zahl, einem Datum oder Na
 eine davon als sicher -> "faktisch" mit dem Hinweis "Quellen widersprechen sich: weglassen oder vorsichtig formulieren".
 schwere "faktisch" = erfundene oder falsche Fakten, falsche Zahlen/Daten/Namen, verdrehte Zusammenhaenge.
 schwere "stil" = harmlose Wertungen, Meinungen, Uebergaenge, rhetorische Fragen, Hook-Saetze, Spannungsaufbau,
-einfache Erklaerungen von Begriffen und veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen),
-sowie harmlose Vereinfachungen, die nichts Falsches behaupten (z. B. nur das Startjahr nennen, "Koenige" statt
-"Monarchen", eine Zeitspanne grob zusammenfassen).
-THEORIEN/BEHAUPTUNGEN: Sind ok, wenn sie im Sprechtext klar als Theorie/Geruecht/Behauptung gekennzeichnet sind
-("Eine Theorie sagt ...", "Manche glauben ...") UND die Quellen diese Theorie erwaehnen. Wird eine unbewiesene
-Behauptung als Tatsache erzaehlt -> "faktisch" ("als Theorie kennzeichnen").
-"faktisch" NUR, wenn eine Aussage den Quellen widerspricht oder etwas behauptet, das dort nicht steht.
+einfache Erklaerungen von Begriffen, Allgemeinwissen (z. B. "Eisberge sind gefroren", "Damals gab es kein Handy"),
+veranschaulichende Alltagsvergleiche (solange die Zahlen stimmen), offene Fragen ("Was glaubst du?") und harmlose
+Vereinfachungen, die nichts Falsches behaupten (z. B. nur das Startjahr nennen, eine Zeitspanne grob zusammenfassen).
+UNGEKLAERTE FAELLE, THEORIEN, BEHAUPTUNGEN, LEGENDEN sind ausdruecklich ERWUENSCHT und KEIN Fehler, wenn sie als solche
+erkennbar sind ("Eine Theorie sagt ...", "Manche glauben ...", "Angeblich ...", "Bis heute ist unklar ...") und die
+Quellen die Theorie oder das Raetsel erwaehnen (auch nur kurz). Das gilt auch fuer Formulierungen wie "Niemand weiss
+genau, warum ...", wenn der Fall laut Quellen ungeklaert ist.
+"faktisch" NUR fuer: (1) Aussagen, die den Quellen widersprechen, (2) erfundene konkrete Details (Zahlen, Daten, Namen,
+Orte, Ereignisse), die nirgends stehen, (3) eine unbewiesene Behauptung, die als sichere Tatsache erzaehlt wird.
+Bei (3) schreib als Problem: "als Theorie kennzeichnen".
 Sauber uebersetzte Fakten aus dem englischen Artikel sind korrekt.
 Melde nur echte Probleme, keine Kleinigkeiten.
 
@@ -1571,12 +1580,42 @@ Antworte NUR mit JSON:
                 "gesamt": "ok" if ok else "nicht_ok", "pruefer": pruefer}
 
 
+def saetze_streichen(daten, ergebnis):
+    """Rettung: Wenn nach den Reparaturen nur noch einzelne Saetze beanstandet werden, fliegen genau diese Saetze raus
+    (statt das ganze, sonst gute Video wegzuwerfen). Erster und letzter Satz bleiben."""
+    import copy
+    beanstandet = [str(x) for x in (ergebnis.get("reparieren") or [])]
+    if not beanstandet or len(beanstandet) > 3:
+        return None
+    neu = copy.deepcopy(daten)
+    szenen = neu.get("szenen", [])
+    weg = set()
+    for b in beanstandet:
+        satz = (re.search(r"Satz: '(.+?)' ->", b) or [None, ""])[1]
+        if not satz:
+            continue
+        texte = [x["text"] for x in szenen]
+        teil = [j for j, t in enumerate(texte) if satz.strip(" .!?").lower() in t.lower()]
+        treffer = difflib.get_close_matches(satz, texte, n=1, cutoff=0.6)
+        if teil or treffer:
+            i = teil[0] if teil else texte.index(treffer[0])
+            if 0 < i < len(szenen) - 1:
+                weg.add(i)
+    if not weg or len(szenen) - len(weg) < 8:
+        return None
+    neu["szenen"] = [x for i, x in enumerate(szenen) if i not in weg]
+    log(f"Rettung: {len(weg)} beanstandete(r) Satz/Saetze gestrichen, Rest wird nochmal geprueft")
+    return neu
+
+
 def reparieren(daten, ergebnis):
     """Laesst die KI nur die beanstandeten Stellen korrigieren, statt das Thema wegzuwerfen."""
     probleme = ergebnis.get("reparieren") or ergebnis.get("probleme") or []
     entwurf = {k: daten[k] for k in ("titel", "szenen", "behauptungen", "beschreibung", "hashtags") if k in daten}
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
-Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
+Fehlerhafte Saetze entweder streng nach den Quellen umschreiben, als Theorie/Vermutung kennzeichnen ("Manche glauben ...",
+"Angeblich ...") oder ganz streichen. Nichts Neues erfinden. Theorien und ungeklaerte Raetsel duerfen bleiben, wenn sie
+klar als solche erkennbar sind.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus den Quellen (Copy-Paste in Originalsprache).
 Erster und letzter Satz nur aendern, wenn sie selbst fehlerhaft sind (sie wurden extra fuer Catch und Loop optimiert). Gesamtlaenge 120 bis 145 Woerter, NIEMALS mehr als 155. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
 
@@ -3451,6 +3490,11 @@ def erstelle_video():
                 log(f"Reparatur-Runde {runde}: korrigiere beanstandete Stellen ...")
                 kandidat = reparieren(kandidat, ergebnis)
                 ok, ergebnis = faktencheck(kandidat)
+            if not ok:
+                gekuerzt = saetze_streichen(kandidat, ergebnis)
+                if gekuerzt:
+                    kandidat = gekuerzt
+                    ok, ergebnis = faktencheck(kandidat)
         except Exception as e:
             log(f"Fehler: {e}")
             continue
@@ -3461,7 +3505,9 @@ def erstelle_video():
         log("Faktencheck NICHT bestanden, nehme neues Thema.")
 
     if not daten:
-        sys.exit("Kein Thema hat den Faktencheck bestanden. Bitte nochmal starten.")
+        gruende = "; ".join(str(x) for x in ((ergebnis or {}).get("reparieren") or (ergebnis or {}).get("probleme") or [])[:3])
+        sys.exit("Kein Thema hat den Faktencheck bestanden. Bitte nochmal starten."
+                 + (f"\nLetzte Gründe: {gruende[:600]}" if gruende else ""))
 
     felder_auffuellen(daten)
     fan = fan_wunsch_fuer(WUNSCH_THEMA)
