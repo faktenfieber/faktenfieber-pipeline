@@ -429,6 +429,21 @@
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAIBOWrnWikJb-b1AAHPSbxgE465EqHOYQACAx0AAszLOVNI2boDrdTkaT0E",
    "modus": "fakt"
+  },
+  "2026-11-01 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41320718351",
+   "message_id": 317,
+   "titel": "Warum Astronauten langsamer altern",
+   "thema": "Zeitdilatation",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-01T16:32:20.934454+01:00",
+   "wunsch": "Warum die Zeit im Weltall langsamer vergeht",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBPGrnW4QKwkAzF4KYBQxvk2-N95uiAAIFHQACzMs5Uxiiwvy1WORvPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
