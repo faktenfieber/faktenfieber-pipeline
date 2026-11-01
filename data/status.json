@@ -414,6 +414,21 @@
    },
    "ig_media_id": "18500448856100496",
    "gepostet_um": "2026-11-01T11:58:42.433596+01:00"
+  },
+  "2026-11-01 16:21": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "41320654103",
+   "message_id": 314,
+   "titel": "Der Pilz, der dich am Leben hält",
+   "thema": "Penicilline",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-01T16:26:35.191654+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBOWrnWikJb-b1AAHPSbxgE465EqHOYQACAx0AAszLOVNI2boDrdTkaT0E",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
