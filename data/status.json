@@ -392,8 +392,8 @@
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
- "token_check": "2026-10-31",
- "kommentare_check": "2026-10-31T19:33:57.112799+01:00",
+ "token_check": "2026-11-01",
+ "kommentare_check": "2026-11-01T07:06:07.915468+01:00",
  "ig_name": "faktenfieber.official",
  "kommentare_gesehen": [],
  "antworten": {},
@@ -403,10 +403,14 @@
  "admin_pin": "c4062b5c0d80fa0e2236a2c112c941350bdfe668120b231054eb5ad4e0f3fb67",
  "admin_version": 1,
  "cf_ig_sync": "2acbd9260578",
- "trend_alarm_tag": "2026-10-31",
+ "trend_alarm_tag": "2026-11-01",
  "trends_gemeldet": [
   "The Rocky Horror Picture Show",
-  "Generation Z"
+  "Generation Z",
+  "Halloween",
+  "Reformationstag"
  ],
- "archiv_nachgetragen": 1
+ "archiv_nachgetragen": 1,
+ "fan_wuensche": {},
+ "mehr_wunsch": {}
 }
