@@ -1038,7 +1038,7 @@ Antworte NUR mit JSON:
   "musik_stimmung": "eins von: spannend, mysterioes, dramatisch, froehlich, episch, historisch, kurios, ruhig",
   "suchbegriff_thema": "englischer Stock-Video-Suchbegriff fuer das Thema allgemein (2-3 Woerter)",
   "hook_text": "Texteinblendung fuer die ersten Sekunden: max. 6 Woerter, der krasseste Fakt, wahr laut Artikel",
-  "kommentar_frage": "kurze Frage an die Zuschauer fuer die Kommentare, passend zum Thema"
+  "kommentar_frage": "Frage, die zum MITREDEN einlaedt (Schaetzfrage, 'Haettest du ...?', 'Was glaubst du ...?', 'Welches Thema soll als Naechstes kommen?') - keine Ja/Nein-Frage, max. 15 Woerter"
 }}"""
     daten, modell = ki(prompt, temperatur=0.8)
     daten["thema"] = titel
@@ -2605,6 +2605,10 @@ YT_REFRESH_TOKEN = os.environ.get("YT_REFRESH_TOKEN", "")
 
 def youtube_beschreibung(daten):
     teile = [daten.get("beschreibung", "")]
+    if not daten.get("_lang"):
+        teile += ["", f"Fakt #{daten.get('_folge') or folgen_nummer()} · Abonnieren für jeden Tag 3 neue Fakten 🔥"]
+    if fan_zeile(daten):
+        teile += ["", fan_zeile(daten).replace(" – danke!", " (Instagram) – danke!")]
     if daten.get("kommentar_frage"):
         teile += ["", f"💬 {daten['kommentar_frage']} Schreib's in die Kommentare!"]
     teile += ["", quellen_zeile(daten)]
@@ -2668,13 +2672,26 @@ IG_USER = os.environ.get("IG_USER_ID", "")
 IG_API = "https://graph.instagram.com"
 
 
+def folgen_nummer():
+    """Laufende Nummer ('Fakt #57') - macht aus einzelnen Videos eine Sammlung, die man komplett haben will."""
+    return len([v for v in archiv_laden() if v.get("ig") or v.get("yt")]) + 1
+
+
+def fan_zeile(daten):
+    fan = daten.get("_fan") or {}
+    return (f"💡 Themenwunsch von @{fan['user']} – danke! Was sollen wir als Nächstes erklären? Schreib's in die Kommentare."
+            if fan.get("user") else "")
+
+
 def instagram_caption(daten):
-    hashtags = [h if h.startswith("#") else f"#{h}" for h in daten.get("hashtags", [])][:25]
-    teile = [daten["titel"], "", daten.get("beschreibung", "")]
+    hashtags = [h if h.startswith("#") else f"#{h}" for h in daten.get("hashtags", [])][:5]   # Instagram: max. 5
+    teile = [f"{daten['titel']}  ·  Fakt #{daten.get('_folge') or folgen_nummer()}", "", daten.get("beschreibung", "")]
+    if fan_zeile(daten):
+        teile += ["", fan_zeile(daten)]
     if daten.get("kommentar_frage"):
         teile += ["", f"💬 {daten['kommentar_frage']}"]
-    teile += ["", quellen_zeile(daten)]
-    teile += ["", " ".join(hashtags)]
+    teile += ["", "🔥 Folg @faktenfieber.official – jeden Tag 3 Fakten, die du sofort weitererzählen willst.",
+              "", quellen_zeile(daten), "", " ".join(hashtags)]
     return "\n".join(teile)[:2150]
 
 
@@ -2944,6 +2961,10 @@ def erstelle_video():
         sys.exit("Kein Thema hat den Faktencheck bestanden. Bitte nochmal starten.")
 
     felder_auffuellen(daten)
+    fan = fan_wunsch_fuer(WUNSCH_THEMA)
+    if fan:
+        daten["_fan"] = fan
+        log(f"Fan-Wunsch von @{fan.get('user')} – wird in der Beschreibung erwaehnt")
     video, dauer = video_bauen(daten)
     meta = {k: v for k, v in daten.items() if k not in ("_artikel", "_bilder")}
     meta.update(faktencheck=check, dauer=round(dauer, 1))
@@ -2959,6 +2980,8 @@ def veroeffentlichen(video, daten, einzeln=True):
     """Laedt auf YouTube + Instagram hoch. einzeln=True: jede Plattform meldet sich sofort in Telegram.
     Fehler werden immer gemeldet. Gibt Ergebnis-Dict zurueck."""
     ergebnis = {}
+    if not daten.get("_lang"):
+        daten["_folge"] = folgen_nummer()
     try:
         nachweise_merken(daten)
     except Exception as e:
@@ -3218,6 +3241,10 @@ def modus_erstellen():
                          "message_id": msg, "titel": daten["titel"], "thema": daten.get("thema", ""), "extra": extra,
                          "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat(),
                          "wunsch": WUNSCH_THEMA, "verworfen": ANDERS_ALS}
+    if daten.get("_fan"):                         # Fan-Wunsch ist umgesetzt -> nicht mehr als offen anzeigen
+        w = st.get("fan_wuensche", {}).get(_kurz_id(daten["_fan"].get("thema", "")))
+        if w:
+            w["status"] = "gebaut"
     status_speichern(st)
     log(f"FERTIG: Video fuer {slot} {'automatisch freigegeben (Auto-Modus)' if auto else 'wartet auf Freigabe'}")
 
@@ -3256,7 +3283,8 @@ def modus_pruefen():
     befehl = os.environ.get("AKTION", "")
     if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht", "idee", "ideen", "ideen_leeren",
                   "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen", "kommentare", "kibilder",
-                  "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset"):
+                  "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset",
+                  "fanidee", "fan_weg", "idee_loeschen", "antw_text"):
         befehl_ausfuehren(st, befehl)
         if befehl in EINSTELLUNG_BEFEHLE:
             einstellungen_speichern(st)
@@ -3291,6 +3319,8 @@ def modus_pruefen():
                 eintrag["_slot"] = slot
                 archiv_eintragen(slot, eintrag, meta, ergebnis)
                 posting_melden(eintrag, meta, ergebnis)
+                if ergebnis.get("instagram"):
+                    fan_benachrichtigen(st, meta, ergebnis["instagram"])
                 eintrag.pop("_slot", None)
                 log(f"{slot}: gepostet {ergebnis}")
             except Exception as e:
@@ -3421,6 +3451,9 @@ def archiv_eintragen(slot, eintrag, meta, ergebnis):
     archiv.append({
         "slot": slot, "gepostet": jetzt().isoformat(), "titel": meta.get("titel", ""), "thema": meta.get("thema", ""),
         "hook_stil": meta.get("hook_stil", ""), "stimme": meta.get("_stimme", ""), "quelle": meta.get("_quelle", ""),
+        "folge": meta.get("_folge"), "fan": (meta.get("_fan") or {}).get("user"), "frage": meta.get("kommentar_frage", ""),
+        "catch": meta.get("_hook_punkte"), "faden": meta.get("_roter_faden"), "serie": meta.get("_serie"),
+        "schwierigkeit": meta.get("_schwierigkeit"),
         "stunde": slot[11:13], "ig": meta.get("_ig_media_id") or eintrag.get("ig_media_id"), "yt": yt,
         "ig_link": ergebnis.get("instagram"), "run_id": eintrag.get("run_id"), "dauer": meta.get("dauer"),
         "stats": {},
@@ -3663,14 +3696,38 @@ Kommentar von @{k.get('username')}: "{k.get('text', '')[:400]}"
 Schreib eine kurze, sympathische Antwort (max. 2 Saetze, locker, Du-Form, 0-1 Emoji). Bei Fragen: ehrlich antworten,
 nur mit dem, was zum Thema sicher stimmt; im Zweifel neugierig zurueckfragen. Keine Werbung, keine Diskussionen.
 Spam, Beleidigungen, Hass oder Links -> "ignorieren": true.
+Zusaetzlich: Wuenscht sich die Person ein THEMA fuer ein naechstes Video ("mach mal was ueber ...")? -> "themenwunsch":
+konkretes Thema in 1-5 Woertern, sonst null. Will sie MEHR zu diesem Video (Teil 2, mehr davon, weiter)? -> "will_mehr": true.
 
-Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false}}""", temperatur=0.7)
+Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false, "themenwunsch": "..." oder null, "will_mehr": true/false}}""", temperatur=0.7)
         except Exception as e:
             log(f"Kommentar-Vorschlag nicht moeglich: {e}")
             continue
+        wunsch = str(vorschlag.get("themenwunsch") or "").strip()[:50]
+        if wunsch and wunsch.lower() not in ("null", "none") and not vorschlag.get("ignorieren"):
+            kid = _kurz_id(wunsch)
+            if kid not in st.setdefault("fan_wuensche", {}):
+                st["fan_wuensche"][kid] = {"thema": wunsch, "user": k.get("username", ""), "kommentar_id": k["id"],
+                                           "am": jetzt().isoformat()}
+                tg("sendMessage", chat_id=TG_CHAT,
+                   text=f"💡 FAN-WUNSCH von @{k.get('username')}: „{wunsch}“\n„{k.get('text', '')[:200]}“\n\n"
+                        f"Wenn du das Video machst, wird @{k.get('username')} in der Beschreibung erwähnt und bekommt "
+                        f"automatisch eine Antwort, sobald es online ist – so baut man eine Fanbase auf. 💛",
+                   reply_markup=json.dumps({"inline_keyboard": [[
+                       {"text": "💡 In Ideen-Liste", "callback_data": f"fanidee|{kid}"},
+                       {"text": "⚡ Sofort bauen", "callback_data": f"trend|{wunsch.encode('utf-8')[:55].decode('utf-8', 'ignore')}"}]]}))
+        if vorschlag.get("will_mehr") and v.get("slot"):
+            zaehler = st.setdefault("mehr_wunsch", {})
+            zaehler[v["slot"]] = zaehler.get(v["slot"], 0) + 1
+            if zaehler[v["slot"]] == 2:            # ab 2 Fans, die mehr wollen
+                tg("sendMessage", chat_id=TG_CHAT,
+                   text=f"🔁 Fans wollen mehr: Schon 2 Leute fragen nach Teil 2 zu „{v.get('titel', '')[:60]}“.",
+                   reply_markup=json.dumps({"inline_keyboard": [[{"text": "🔁 Teil 2 bauen", "callback_data": f"teil2|{v['slot']}"}]]}))
         if vorschlag.get("ignorieren") or not vorschlag.get("antwort"):
             continue
-        st.setdefault("antworten", {})[k["id"]] = {"text": vorschlag["antwort"][:300], "titel": v.get("titel", "")}
+        st.setdefault("antworten", {})[k["id"]] = {"text": vorschlag["antwort"][:300], "titel": v.get("titel", ""),
+                                                   "user": k.get("username", ""), "kommentar": k.get("text", "")[:300],
+                                                   "am": jetzt().isoformat()}
         tg("sendMessage", chat_id=TG_CHAT,
            text=f"💬 Neuer Kommentar zu „{v.get('titel', '')[:40]}“\n@{k.get('username')}: {k.get('text', '')[:300]}\n\n"
                 f"🤖 Vorschlag:\n{vorschlag['antwort'][:300]}",
@@ -3678,10 +3735,48 @@ Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false}}""", temper
                                                          {"text": "🙈 Ignorieren", "callback_data": f"ign|{k['id']}"}]]}))
     st["kommentare_gesehen"] = list(gesehen)[-500:]
     st["antworten"] = dict(list(st.get("antworten", {}).items())[-50:])
+    st["fan_wuensche"] = dict(list(st.get("fan_wuensche", {}).items())[-40:])
+    st["mehr_wunsch"] = dict(list(st.get("mehr_wunsch", {}).items())[-40:])
 
 
-def kommentar_antworten(st, kommentar_id, senden=True):
+def _kurz_id(text):
+    import hashlib
+    return hashlib.sha1(text.encode()).hexdigest()[:10]
+
+
+def fan_wunsch_fuer(thema):
+    """Gehoert dieses Wunschthema zu einem Fan-Kommentar? (dann Credit in der Beschreibung + Antwort an den Fan)"""
+    if not thema:
+        return None
+    try:
+        wuensche = json.loads(STATUS_DATEI.read_text(encoding="utf-8")).get("fan_wuensche", {})
+    except Exception:
+        return None
+    for w in wuensche.values():
+        if w.get("thema", "").strip().lower() == thema.replace(" TEIL2", "").strip().lower():
+            return w
+    return None
+
+
+def fan_benachrichtigen(st, meta, link):
+    """Nach dem Posten: dem Fan unter seinem Kommentar Bescheid geben -> er fuehlt sich gesehen, kommt wieder."""
+    fan = meta.get("_fan") or {}
+    if not (fan.get("kommentar_id") and IG_TOKEN):
+        return
+    try:
+        requests.post(f"{IG_API}/{fan['kommentar_id']}/replies", timeout=30, data={
+            "message": f"Dein Wunsch ist online! 🎉 Schau dir unser neuestes Reel an – „{meta.get('titel', '')[:60]}“ 🔥",
+            "access_token": IG_TOKEN})
+        st.get("fan_wuensche", {}).pop(_kurz_id(fan.get("thema", "")), None)
+        log(f"Fan @{fan.get('user')} benachrichtigt")
+    except requests.RequestException:
+        pass
+
+
+def kommentar_antworten(st, kommentar_id, senden=True, eigener_text=None):
     vorschlag = st.get("antworten", {}).pop(kommentar_id, None)
+    if vorschlag and eigener_text:
+        vorschlag["text"] = eigener_text[:300]
     if not vorschlag:
         return telegram_text("ℹ️ Diesen Kommentar habe ich schon erledigt.")
     if not senden:
@@ -4341,6 +4436,32 @@ def befehl_ausfuehren(st, befehl):
                           + ("beim nächsten automatischen Video." if platz == 1 else f"in {platz} automatischen Videos.")
                           + "\nSofort statt später? Dann /thema " + text)
         return
+    if befehl == "fanidee":
+        w = st.get("fan_wuensche", {}).get(os.environ.get("AKTION_SLOT", "").strip())
+        if not w:
+            return telegram_text("ℹ️ Diesen Fan-Wunsch gibt es nicht mehr.")
+        d = ideen_laden()
+        if w["thema"] not in d["warteschlange"]:
+            d["warteschlange"].append(w["thema"])
+            ideen_speichern(d)
+        w["status"] = "ideen"
+        telegram_text(f"💡 „{w['thema']}“ (Wunsch von @{w['user']}) ist vorgemerkt – Platz {d['warteschlange'].index(w['thema']) + 1}.")
+        return
+    if befehl == "fan_weg":
+        st.get("fan_wuensche", {}).pop(os.environ.get("AKTION_SLOT", "").strip(), None)
+        return
+    if befehl == "idee_loeschen":
+        text = os.environ.get("AKTION_SLOT", "").strip()
+        d = ideen_laden()
+        if text in d["warteschlange"]:
+            d["warteschlange"].remove(text)
+            ideen_speichern(d)
+            telegram_text(f"🗑 „{text}“ aus der Ideen-Liste entfernt.")
+        return
+    if befehl == "antw_text":
+        kid, _, text = os.environ.get("AKTION_SLOT", "").partition("|")
+        kommentar_antworten(st, kid.strip(), senden=True, eigener_text=text.strip())
+        return
     if befehl == "ideen_leeren":
         d = ideen_laden()
         d["warteschlange"] = []
@@ -4421,7 +4542,7 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
         kommentar_antworten(st, slot, senden=aktion == "antw")
         return
     if aktion == "teil2":
-        eintrag = st["slots"].get(slot) or {}
+        eintrag = st["slots"].get(slot) or next((v for v in archiv_laden() if v.get("slot") == slot), {})
         thema = eintrag.get("thema") or eintrag.get("titel", "")
         if thema and _neu_starten("sofort", f"{thema} TEIL2"):
             if not vom_tuersteher:
