@@ -378,7 +378,7 @@
    "gepostet_um": "2026-10-31T20:22:36.876377+01:00"
   },
   "2026-11-01 08:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "auto": true,
    "run_id": "41273376267",
    "message_id": 291,
@@ -388,7 +388,13 @@
    "neu_gemacht": 0,
    "erstellt": "2026-11-01T05:35:37.774563+01:00",
    "wunsch": "Was passiert in einem schwarzen Loch?",
-   "verworfen": []
+   "verworfen": [],
+   "links": {
+    "youtube": "https://youtube.com/shorts/oZ_u_GHVcAM",
+    "instagram": "https://www.instagram.com/reel/DfMI7MngLTV/"
+   },
+   "ig_media_id": "18343152703256667",
+   "gepostet_um": "2026-11-01T07:57:23.454777+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
