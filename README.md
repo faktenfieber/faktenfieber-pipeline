@@ -92,7 +92,11 @@ Freigabe **nach** dem Termin → wird sofort gepostet. Ohne ✅ wird nichts gepo
 | 🧠 KI-Wochentipps | jeden Sonntag 3 Tipps + 3 Themenvorschläge zum Kopieren |
 | 🔥 Trend-Alarm | jeden Morgen: explodierte Themen mit Knopf „Video bauen“ |
 | 🗓 Uhrzeit-Test | sonntags: schwache Uhrzeit wird (mit deinem Okay) 1 Woche verschoben getestet und ausgewertet |
-| 🔐 Admin-Dashboard | alles per Klick steuern, mit PIN |
+| 🔐 Admin-Dashboard | alles per Klick steuern, mit PIN – Reiter Übersicht · Videos · Community · Inhalte · Zeitplan · System |
+| 📊 Live-Dashboard | Kacheln antippen für Details, Zeitraum-Filter, automatische Erkenntnisse, Video-Details |
+| 💛 Fan-Wünsche | Themenwünsche aus Kommentaren → Video → Fan wird genannt + bekommt automatisch eine Antwort |
+| 🔁 Teil-2-Nachfrage | fragen 2+ Leute nach mehr, kommt ein Knopf „Teil 2 bauen“ |
+| #️⃣ Fakt-Nummer | jede Folge hat eine Nummer (Fakt #57) – Sammel-Effekt |
 
 ---
 
