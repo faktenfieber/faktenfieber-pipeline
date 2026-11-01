@@ -439,7 +439,7 @@
    "gepostet_um": "2026-11-01T16:34:36.194099+01:00"
   },
   "2026-11-01 18:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "auto": true,
    "run_id": "41320718351",
    "message_id": 317,
@@ -451,7 +451,13 @@
    "wunsch": "Warum die Zeit im Weltall langsamer vergeht",
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAIBPGrnW4QKwkAzF4KYBQxvk2-N95uiAAIFHQACzMs5Uxiiwvy1WORvPQQ",
-   "modus": "fakt"
+   "modus": "fakt",
+   "links": {
+    "youtube": "https://youtube.com/shorts/eJwIFP_GB-I",
+    "instagram": "https://www.instagram.com/reel/DfNNoo8E7-i/"
+   },
+   "ig_media_id": "17916141237542556",
+   "gepostet_um": "2026-11-01T17:58:01.939192+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
@@ -482,14 +488,14 @@
   "ig_follower": 0
  },
  "analysiert": [
-  "2026-10-31 08:00",
-  "2026-10-29 23:22",
-  "2026-10-30 12:00",
-  "2026-10-30 20:28",
-  "2026-10-31 12:00",
-  "2026-10-29 19:07",
-  "2026-10-30 08:00",
   "2026-10-30 15:48",
-  "2026-10-30 18:00"
+  "2026-10-29 19:07",
+  "2026-10-31 08:00",
+  "2026-10-30 20:28",
+  "2026-10-30 12:00",
+  "2026-10-29 23:22",
+  "2026-10-30 08:00",
+  "2026-10-30 18:00",
+  "2026-10-31 12:00"
  ]
 }

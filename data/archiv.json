@@ -640,5 +640,36 @@
   },
   "punkte": 5.5,
   "stats_am": "2026-11-01T17:25:59.470881+01:00"
+ },
+ {
+  "slot": "2026-11-01 18:00",
+  "gepostet": "2026-11-01T17:58:01.939882+01:00",
+  "titel": "Warum Astronauten langsamer altern",
+  "thema": "Zeitdilatation",
+  "hook_stil": "Stell dir vor",
+  "stimme": "Charon",
+  "quelle": "ideen",
+  "folge": 28,
+  "fan": null,
+  "frage": "Wie schnell müsstest du reisen?",
+  "catch": 9,
+  "faden": 6,
+  "serie": null,
+  "schwierigkeit": 4.2,
+  "modus": "fakt",
+  "text": "Dein Freund im All altert schneller als du. Aus Sicht der Menschen am Bahnsteig läuft deine Uhr plötzlich langsamer. Das klingt absurd, ist aber ein bewiesener Effekt der Relativitätstheorie. Albert Einstein beschrieb diesen Effekt bereits im Jahr 1905. Je schneller du dich bewegst, desto stärker dehnt sich deine Zeit. Nah an der Lichtgeschwindigkeit wird der Effekt extrem groß. Aber das ist noch nicht mal das Verrückteste daran. Auch die Schwerkraft beeinflusst den Lauf der Zeit direkt. Wo die Schwerkraft stark ist, vergeht die Zeit langsamer. Auf der Erde ist die Zeit minimal langsamer als im Weltraum. Der Unterschied ist winzig klein, aber real messbar. Weil dort die Schwerkraft minimal schwächer wirkt. Genau deshalb laufen Uhren auf Satelliten schneller, weil die Gravitation dort schwächer ist.",
+  "stunde": "18",
+  "ig": "17916141237542556",
+  "yt": "eJwIFP_GB-I",
+  "ig_link": "https://www.instagram.com/reel/DfNNoo8E7-i/",
+  "run_id": "41320718351",
+  "dauer": 54.3,
+  "stats": {
+   "likes": 0,
+   "kommentare": 1,
+   "aufrufe": 0
+  },
+  "punkte": 3.0,
+  "stats_am": "2026-11-01T17:58:03.008106+01:00"
  }
 ]
