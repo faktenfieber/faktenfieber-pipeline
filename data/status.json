@@ -376,6 +376,19 @@
    },
    "ig_media_id": "17887840380689790",
    "gepostet_um": "2026-10-31T20:22:36.876377+01:00"
+  },
+  "2026-11-01 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41273376267",
+   "message_id": 291,
+   "titel": "Was passiert in einem schwarzen Loch",
+   "thema": "Schwarzes Loch",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-01T05:35:37.774563+01:00",
+   "wunsch": "Was passiert in einem schwarzen Loch?",
+   "verworfen": []
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
