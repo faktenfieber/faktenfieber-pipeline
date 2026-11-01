@@ -4548,13 +4548,46 @@ def verlauf_laden():
     return _lade_json(VERLAUF_DATEI) or []
 
 
+def yt_videos_summe():
+    """Summe der Aufrufe ALLER Videos des Kanals (pro Video live gezaehlt). Die Kanal-Gesamtzahl von YouTube
+    hinkt oft einen Tag hinterher - diese Summe nicht. Basis fuer 'Aufrufe heute' im Dashboard."""
+    key = os.environ.get("YT_API_KEY", "")
+    eigene = [v["yt"] for v in archiv_laden() if v.get("yt")]
+    if not (key and eigene):
+        return None
+    try:
+        info = requests.get("https://www.googleapis.com/youtube/v3/videos", timeout=30, params={
+            "part": "snippet", "id": eigene[-1], "key": key}).json()
+        uploads = "UU" + info["items"][0]["snippet"]["channelId"][2:]
+        ids, seite = [], ""
+        for _ in range(6):
+            r = requests.get("https://www.googleapis.com/youtube/v3/playlistItems", timeout=30, params={
+                "part": "contentDetails", "maxResults": 50, "playlistId": uploads, "key": key, "pageToken": seite}).json()
+            ids += [x["contentDetails"]["videoId"] for x in r.get("items", [])]
+            seite = r.get("nextPageToken")
+            if not seite:
+                break
+        return sum(v["yt_aufrufe"] for v in _yt_aufrufe(ids).values())
+    except Exception as e:
+        log(f"YouTube-Videosumme: {e}")
+        return None
+
+
 def verlauf_merken(erzwingen=False):
-    """Einmal am Tag die Kanalzahlen notieren (daraus entstehen Prognose und Dashboard-Kurve)."""
+    """Einmal am Tag (kurz nach Mitternacht) die Kanalzahlen notieren (Prognose, Kurven, 'Heute' im Dashboard)."""
     verlauf = verlauf_laden()
     heute = jetzt().date().isoformat()
     if verlauf and verlauf[-1].get("tag") == heute and not erzwingen:
+        if "yt_videos_summe" not in verlauf[-1]:  # Eintrag von vor dem Update: Basis fuer 'Heute' nachtragen
+            summe = yt_videos_summe()
+            if summe is not None:
+                verlauf[-1].update(yt_videos_summe=summe, basis_zeit=jetzt().strftime("%H:%M"))
+                VERLAUF_DATEI.write_text(json.dumps(verlauf[-400:], ensure_ascii=False, indent=1), encoding="utf-8")
+                return verlauf, True
         return verlauf, False
     z = kanal_zahlen()
+    z["yt_videos_summe"] = yt_videos_summe()
+    z["basis_zeit"] = jetzt().strftime("%H:%M")
     if all(v is None for v in z.values()):
         return verlauf, False
     verlauf = [v for v in verlauf if v.get("tag") != heute] + [{"tag": heute, **z}]
