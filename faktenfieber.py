@@ -530,6 +530,10 @@ SERIE = None                         # heutiger Themen-Tag (wird in themen_pool 
 ANDERS_ALS = []                      # Titel/Themen verworfener Videos fuer denselben Termin (-> neuer Blickwinkel)
 if TEIL2:
     WUNSCH_THEMA = WUNSCH_THEMA[:-6].strip()
+REMASTER = WUNSCH_THEMA.endswith(" REMASTER")       # Hit nach ein paar Wochen neu aufgelegt
+if REMASTER:
+    WUNSCH_THEMA = WUNSCH_THEMA[:-9].strip()
+QUIZ = WUNSCH_THEMA == "__QUIZ__"                   # Sonntags-Quiz zu den Fakten der Woche
 WUNSCH_HINWEIS = ""
 HOOK_STILE_TEXT = ""
 HOOK_ZULETZT = ""
@@ -806,7 +810,10 @@ def themen_pool(benutzt):
         return _KANDIDATEN
     SERIE = None if WUNSCH_THEMA else themen_tag()
     pool = {}
-    if WUNSCH_THEMA:
+    if WUNSCH_THEMA and REMASTER:                  # Remaster: genau derselbe Artikel wie beim Hit
+        titel_r = artikel_finden(WUNSCH_THEMA) or WUNSCH_THEMA
+        pool[titel_r] = ("remaster", "")
+    elif WUNSCH_THEMA:
         pool.update({t: ("ideen", h) for t, h in ideen_brainstorm(set() if TEIL2 else benutzt, WUNSCH_THEMA, 10).items()})
         wunsch_rein = WUNSCH_THEMA.replace(" TEIL2", "")
         direkt = artikel_finden(wunsch_rein)
@@ -977,6 +984,28 @@ HOOK_STILE = {
 HOOK_DATEI = ROOT / "data" / "hooks.json"
 
 
+def hook_vorgabe():
+    """A/B-Test ueber die Zeit: Stile mit wenig Daten werden gezielt ausprobiert (Erkunden), danach bekommen die
+    erfolgreichsten Stile immer mehr Videos (Ausnutzen). Rueckgabe: (Stil, Begruendung)."""
+    archiv = [v for v in archiv_laden() if v.get("hook_stil") in HOOK_STILE and v.get("punkte") is not None]
+    zuletzt = hook_zuletzt()
+    daten = {k: [v["punkte"] for v in archiv if v["hook_stil"] == k] for k in HOOK_STILE}
+    wenig = [k for k, p in daten.items() if len(p) < 3 and k not in zuletzt[-2:]]
+    if wenig and random.random() < 0.6:
+        stil = random.choice(wenig)
+        return stil, f"Test: '{stil}' hat erst {len(daten[stil])} Videos mit Zahlen"
+    schnitt = {k: sum(p) / len(p) for k, p in daten.items() if len(p) >= 3}
+    if not schnitt:
+        return None, ""
+    if random.random() < 0.2:                    # immer ein bisschen weiter testen
+        kandidaten = [k for k in HOOK_STILE if k not in zuletzt[-2:]]
+        stil = random.choice(kandidaten)
+        return stil, f"Gegentest: '{stil}'"
+    gewichte = {k: max(w, 1) ** 2 for k, w in schnitt.items() if k not in zuletzt[-1:]}
+    stil = random.choices(list(gewichte), weights=list(gewichte.values()))[0]
+    return stil, f"Gewinner-Stil: '{stil}' (Ø {schnitt[stil]:.0f} Punkte)"
+
+
 def hook_zuletzt():
     try:
         return json.loads(HOOK_DATEI.read_text(encoding="utf-8"))[-3:]
@@ -993,6 +1022,10 @@ def hook_merken(stil):
 def skript_erstellen(titel):
     global WUNSCH_HINWEIS, HOOK_STILE_TEXT, HOOK_ZULETZT
     HOOK_ZULETZT = ", ".join(hook_zuletzt()) or "(noch keine)"
+    vorgabe, grund = hook_vorgabe()
+    if vorgabe:
+        HOOK_ZULETZT += f"\n  >>> FUER DIESES VIDEO BITTE DEN STIL \"{vorgabe}\" NEHMEN ({grund}), wenn er zum Thema passt."
+        log(f"Hook-Vorgabe: {vorgabe} ({grund})")
     profil = erfolgs_profil()
     if profil:
         HOOK_ZULETZT += "\n  " + profil.replace("\n", "\n  ")
@@ -1011,6 +1044,11 @@ def skript_erstellen(titel):
         WUNSCH_HINWEIS += ("\n- NEU GEMACHT: Diese Version(en) wurden vom Kanalbetreiber verworfen: "
                            + "; ".join(ANDERS_ALS[-3:]) + ". Mach es deutlich ANDERS: anderer Einstieg, anderer "
                            "Blickwinkel, andere Fakten in den Vordergrund, anderer Titel.")
+    if REMASTER:
+        alt = next((v for v in reversed(archiv_laden()) if v.get("thema") == titel), {})
+        WUNSCH_HINWEIS += (f"\n- REMASTERED: Zu diesem Thema lief vor ein paar Wochen ein Hit (Titel damals: \"{alt.get('titel', '?')}\"). "
+                           "Viele neue Follower kennen ihn nicht. Erzaehl die Geschichte NEU: anderer Einstieg, andere "
+                           "Reihenfolge, frische Formulierungen, neuer Titel - die staerksten Fakten duerfen wieder vorkommen.")
     if TEIL2:
         WUNSCH_HINWEIS += ("\n- DAS IST TEIL 2: Zu diesem Thema gab es schon ein Video. Nimm ANDERE Fakten und einen anderen "
                            "Blickwinkel als die offensichtlichsten. Der Titel enthaelt \"Teil 2\". Der Einstieg darf "
@@ -1246,7 +1284,7 @@ Antworte NUR mit JSON:
 
 def wunsch_check(daten):
     """Trifft das Skript wirklich, was du dir gewuenscht hast? Wenn nicht: gezielt auf den Wunsch umschreiben."""
-    if not WUNSCH_THEMA or TEIL2:
+    if not WUNSCH_THEMA or TEIL2 or REMASTER:
         return daten
     w = WUNSCH_THEMA.replace(" TEIL2", "")
     text = "\n".join(f"{i+1}. {s_['text']}" for i, s_ in enumerate(daten.get("szenen", [])))
@@ -2715,6 +2753,11 @@ def telegram_senden(video, daten, check, dauer, knoepfe=None, kopfzeile=""):
                           files={"video": ("faktenfieber.mp4", f, "video/mp4")}, timeout=300)
     if r.status_code != 200:
         log(f"Telegram-Video-Fehler: {r.text[:300]}")
+    else:
+        try:
+            daten["_tg_file"] = r.json()["result"]["video"]["file_id"]
+        except Exception:
+            pass
 
     pruef = "\n".join(f"{'✅' if p.get('beleg_im_text') else '⚠️'} {p.get('behauptung')}"
                       for p in check.get("pruefung", []))
@@ -2939,6 +2982,318 @@ def _github_pages(video):
     return None
 
 
+def seite_datei(pfad, ordner="s"):
+    """Legt eine Datei (z. B. Story-Bild) auf faktenfieber.github.io/<ordner>/ ab und gibt die oeffentliche URL zurueck."""
+    if not GH_PAT:
+        return None
+    import shutil
+    import tempfile
+    import uuid
+    repo = f"https://x-access-token:{GH_PAT}@github.com/{GH_OWNER}/{GH_OWNER}.github.io.git"
+    tmp = Path(tempfile.mkdtemp())
+    git = lambda *a: subprocess.run(["git", *a], cwd=tmp, check=True, capture_output=True, text=True)
+    name = f"{uuid.uuid4().hex[:10]}{Path(pfad).suffix}"
+    try:
+        subprocess.run(["git", "clone", "--depth", "1", "--branch", "main", repo, str(tmp)], check=True, capture_output=True, text=True)
+        shutil.rmtree(tmp / ordner, ignore_errors=True)
+        (tmp / ordner).mkdir()
+        shutil.copy(pfad, tmp / ordner / name)
+        git("config", "user.name", "faktenfieber-bot")
+        git("config", "user.email", "actions@users.noreply.github.com")
+        git("checkout", "--orphan", "neu")
+        git("add", "-A")
+        git("commit", "-m", "Story-Bild")
+        git("push", "-f", "origin", "neu:main")
+    except subprocess.CalledProcessError as e:
+        log(f"Hochladen fehlgeschlagen: {(e.stderr or '')[-200:].replace(GH_PAT, '***')}")
+        return None
+    url = f"https://{GH_OWNER}.github.io/{ordner}/{name}"
+    for _ in range(24):
+        time.sleep(10)
+        try:
+            if requests.head(url, timeout=20).status_code == 200:
+                return url
+        except requests.RequestException:
+            pass
+    return None
+
+
+def story_bild(oben, gross, unten, ziel):
+    """Story-Bild 1080x1920 im Faktenfieber-Look (dunkler Verlauf, gelbe Akzente, grosse Schrift)."""
+    from PIL import Image, ImageDraw, ImageFont
+    bild = Image.new("RGB", (W, H))
+    z = ImageDraw.Draw(bild)
+    for y in range(H):                             # Verlauf dunkelblau -> fast schwarz
+        t = y / H
+        z.line([(0, y), (W, y)], fill=(int(28 - 18 * t), int(22 - 12 * t), int(52 - 36 * t)))
+    z.rounded_rectangle([90, 260, W - 90, 272], radius=6, fill=(255, 212, 0))
+    f_oben, f_unten = ImageFont.truetype(FONT_DATEI, 64), ImageFont.truetype(FONT_DATEI, 44)
+    z.text(((W - f_oben.getlength(oben)) / 2, 160), oben, font=f_oben, fill=(255, 212, 0))
+    groesse = 92
+    while groesse > 48:                            # Schrift so gross wie moeglich, max. 9 Zeilen
+        f = ImageFont.truetype(FONT_DATEI, groesse)
+        zeilen, akt = [], ""
+        for w in gross.split():
+            if f.getlength(f"{akt} {w}".strip()) > W - 200:
+                zeilen.append(akt)
+                akt = w
+            else:
+                akt = f"{akt} {w}".strip()
+        zeilen.append(akt)
+        if len(zeilen) * groesse * 1.25 < 1100:
+            break
+        groesse -= 6
+    y = (H - len(zeilen) * groesse * 1.25) / 2
+    for zeile in zeilen:
+        z.text(((W - f.getlength(zeile)) / 2, y), zeile, font=f, fill=(255, 255, 255))
+        y += groesse * 1.25
+    z.text(((W - f_unten.getlength(unten)) / 2, H - 260), unten, font=f_unten, fill=(190, 190, 205))
+    bild.save(ziel, quality=92)
+    return ziel
+
+
+def instagram_bild_story(bild):
+    """Postet ein Bild als Instagram-Story (z. B. Fakt des Tages, Meilenstein)."""
+    if not (IG_TOKEN and IG_USER):
+        return False
+    url = seite_datei(bild)
+    if not url:
+        log("Story-Bild konnte nicht bereitgestellt werden")
+        return False
+    r = requests.post(f"{IG_API}/{IG_USER}/media", timeout=60,
+                      data={"media_type": "STORIES", "image_url": url, "access_token": IG_TOKEN})
+    if r.status_code != 200 or "id" not in r.json():
+        log(f"Bild-Story nicht moeglich: {r.text[:200]}")
+        return False
+    container = r.json()["id"]
+    for _ in range(12):
+        time.sleep(5)
+        stt = requests.get(f"{IG_API}/{container}", timeout=30, params={"fields": "status_code", "access_token": IG_TOKEN}).json()
+        if stt.get("status_code") in ("FINISHED", "ERROR", "EXPIRED"):
+            break
+    r = requests.post(f"{IG_API}/{IG_USER}/media_publish", timeout=60, data={"creation_id": container, "access_token": IG_TOKEN})
+    return r.status_code == 200
+
+
+MEILENSTEINE = [50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000]
+
+
+def meilenstein_check(st):
+    """Feiert 100, 500, 1.000 ... Abos/Follower: Telegram-Nachricht + Danke-Story auf Instagram."""
+    letzte = st.get("ms_check")
+    if letzte and jetzt() - datetime.fromisoformat(letzte) < timedelta(hours=2):
+        return
+    st["ms_check"] = jetzt().isoformat()
+    z = kanal_zahlen()
+    erreicht = st.setdefault("meilensteine", {})
+    for key, name, plattform in (("yt_abos", "Abos", "YouTube"), ("ig_follower", "Follower", "Instagram")):
+        wert = z.get(key)
+        if wert is None:
+            continue
+        hoechster = max([m for m in MEILENSTEINE if wert >= m], default=0)
+        if key not in erreicht:                    # erster Lauf: nur merken, nicht feiern
+            erreicht[key] = hoechster
+            continue
+        if hoechster > erreicht[key]:
+            erreicht[key] = hoechster
+            zahl = f"{hoechster:,}".replace(",", ".")
+            gepostet = False
+            if einstellungen_alle().get("feier_story", True):
+                try:
+                    bild = story_bild("FAKTENFIEBER", f"{zahl} {name} auf {plattform}! DANKE, dass ihr dabei seid.",
+                                      "Jeden Tag 3 neue Fakten · @faktenfieber.official", WORK / "meilenstein.jpg")
+                    gepostet = instagram_bild_story(bild)
+                except Exception as e:
+                    log(f"Meilenstein-Story: {e}")
+            telegram_text(f"🎉🎉🎉 MEILENSTEIN: {zahl} {name} auf {plattform}! 🎉🎉🎉\n\nAktuell: {wert:,} – stark!".replace(",", ".")
+                          + ("\n📲 Danke-Story ist auf Instagram online." if gepostet else ""))
+
+
+def fakt_des_tages(st):
+    """Jeden Abend ein Bonus-Fakt als Instagram-Story (aus einem echten Wikipedia-Artikel, Zitat geprueft)."""
+    if not einstellungen_alle().get("fakt_story", True) or not (IG_TOKEN and IG_USER):
+        return
+    heute = jetzt().date().isoformat()
+    if st.get("fakt_story_tag") == heute or jetzt().hour < 19:
+        return
+    st["fakt_story_tag"] = heute
+    kandidaten = list(ideen_laden().get("backlog", {}))[:30] or wiki_kandidaten(set(lade_benutzte()), anzahl=8)
+    random.shuffle(kandidaten)
+    for titel in kandidaten[:4]:
+        try:
+            echt, text, _ = wiki_artikel(titel)
+            antwort, _ = ki(f"""Such aus diesem Wikipedia-Text EINEN ueberraschenden, leicht verstaendlichen Fakt fuer eine
+Instagram-Story ("Fakt des Tages"). Formuliere ihn auf Deutsch in max. 25 Woertern, locker, ohne Fachwoerter.
+Nur was wirklich im Text steht. "beleg" = woertliches Zitat aus dem Text (5-25 Woerter), das den Fakt belegt.
+
+TEXT ({echt}):
+\"\"\"{text[:3000]}\"\"\"
+
+Antworte NUR mit JSON: {{"fakt": "...", "beleg": "...", "taugt": true/false}}""", temperatur=0.5)
+        except Exception as e:
+            log(f"Fakt des Tages: {e}")
+            continue
+        if not antwort.get("taugt", True) or not beleg_gefunden(antwort.get("beleg", ""), text):
+            continue
+        bild = story_bild("FAKT DES TAGES", antwort["fakt"], f"Quelle: Wikipedia · {echt[:40]}", WORK / "fakt.jpg")
+        if instagram_bild_story(bild):
+            telegram_text(f"📲 Fakt des Tages ist als Story online:\n„{antwort['fakt']}“\n(Quelle: Wikipedia – {echt})")
+        return
+
+
+def remaster_vorschlag(st, archiv):
+    """Sonntags: ein alter Hit (4+ Wochen), den neue Follower nicht kennen -> Vorschlag 'Remastered'."""
+    mit = [v for v in archiv if v.get("punkte") is not None]
+    if len(mit) < 10:
+        return
+    median = sorted(v["punkte"] for v in mit)[len(mit) // 2] or 1
+    schon = set(st.get("remastered", []))
+    for v in sorted(mit, key=lambda x: -x["punkte"]):
+        alter = (jetzt() - datetime.fromisoformat(v["gepostet"])).days
+        thema = v.get("thema") or ""
+        knopf = f"trend|{thema} REMASTER"
+        if v["punkte"] < 2 * median or not (28 <= alter <= 150) or thema in schon or len(knopf.encode()) > 64:
+            continue
+        st.setdefault("remastered", []).append(thema)
+        tg("sendMessage", chat_id=TG_CHAT,
+           text=f"♻️ HIT-RECYCLING: „{v.get('titel')}“ lief vor {alter} Tagen {v['punkte'] / median:.1f}× besser als üblich. "
+                f"Seitdem sind viele neue Follower dazugekommen, die es nicht kennen.\n\nEine neu erzählte Version bauen "
+                f"(neuer Einstieg, neuer Titel)?",
+           reply_markup=json.dumps({"inline_keyboard": [[{"text": "♻️ Remastered bauen", "callback_data": knopf},
+                                                         {"text": "Nein", "callback_data": "nein|trend"}]]}))
+        return
+
+
+# ---------------------------------------------------------------- Quiz der Woche
+def _quiz_bild(kopf, frage, optionen, richtig, ziel):
+    from PIL import Image, ImageDraw, ImageFont
+    bild = Image.new("RGB", (W, H))
+    z = ImageDraw.Draw(bild)
+    for y in range(H):
+        t = y / H
+        z.line([(0, y), (W, y)], fill=(int(30 - 20 * t), int(20 - 10 * t), int(55 - 40 * t)))
+    f_kopf, f_frage, f_opt = (ImageFont.truetype(FONT_DATEI, n) for n in (60, 66, 54))
+    z.text(((W - f_kopf.getlength(kopf)) / 2, 230), kopf, font=f_kopf, fill=(255, 212, 0))
+
+    def umbruch(text, font, breite):
+        zeilen, akt = [], ""
+        for w in text.split():
+            if font.getlength(f"{akt} {w}".strip()) > breite:
+                zeilen.append(akt)
+                akt = w
+            else:
+                akt = f"{akt} {w}".strip()
+        return zeilen + [akt]
+    y = 420
+    for zeile in umbruch(frage, f_frage, W - 160)[:6]:
+        z.text(((W - f_frage.getlength(zeile)) / 2, y), zeile, font=f_frage, fill=(255, 255, 255))
+        y += 84
+    y = max(y + 80, 1000)
+    for i, opt in enumerate(optionen[:3]):
+        farbe = (60, 207, 110) if richtig == i else ((70, 70, 85) if richtig is not None else (45, 45, 60))
+        z.rounded_rectangle([110, y, W - 110, y + 150], radius=28, fill=farbe)
+        zeilen = umbruch(f"{'ABC'[i]})  {opt}", f_opt, W - 300)[:2]
+        ty = y + 75 - len(zeilen) * 33
+        for zeile in zeilen:
+            z.text((150, ty), zeile, font=f_opt, fill=(255, 255, 255))
+            ty += 66
+        y += 190
+    bild.save(ziel)
+    return ziel
+
+
+def _bild_clip(bild, ton, ziel, extra=0.0):
+    """Standbild + Sprachaufnahme (+ extra Sekunden Stille zum Mitraten) als Clip."""
+    dauer = wav_dauer(ton) + extra
+    ffmpeg("-loop", "1", "-i", bild, "-i", ton, "-af", f"apad=whole_dur={dauer:.2f}", "-t", f"{dauer:.2f}",
+           "-vf", f"fps={FPS},format=yuv420p", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+           "-ar", "44100", "-ac", "2", "-c:a", "aac", "-b:a", "192k", ziel)
+    return ziel
+
+
+def quiz_bauen():
+    """Sonntags-Quiz: 3 Fragen zu den Fakten der Woche (aus unseren Videos, Antworten mit Zitat belegt)."""
+    for d in (OUT, WORK):
+        d.mkdir(parents=True, exist_ok=True)
+    woche = [v for v in archiv_laden() if not v.get("nachgetragen")
+             and datetime.fromisoformat(v["gepostet"]) > jetzt() - timedelta(days=8)]
+    woche.sort(key=lambda v: -(v.get("punkte") or 0))
+    fragen = []
+    for v in woche:
+        if len(fragen) >= 3:
+            break
+        quelle = v.get("text") or ""
+        try:
+            if len(quelle) < 200:
+                quelle = wiki_artikel(v.get("thema") or v.get("titel"))[1][:2500]
+            antwort, _ = ki(f"""Erstelle EINE Quizfrage zu diesem Video/Text fuer ein Shorts-Quiz (Multiple Choice, 3 Antworten).
+Die richtige Antwort muss im Text stehen. Falsche Antworten plausibel, aber eindeutig falsch. Kurz und einfach:
+Frage max. 14 Woerter, Antworten max. 5 Woerter. "beleg" = woertliches Zitat aus dem Text.
+
+TEXT (Video „{v.get('titel')}“):
+\"\"\"{quelle}\"\"\"
+
+Antworte NUR mit JSON: {{"frage": "...", "optionen": ["...", "...", "..."], "richtig": 0-2, "beleg": "...", "erklaerung": "1 kurzer Satz"}}""",
+                            temperatur=0.5)
+        except Exception as e:
+            log(f"Quizfrage zu {v.get('titel')}: {e}")
+            continue
+        if (len(antwort.get("optionen", [])) == 3 and str(antwort.get("richtig")) in "012"
+                and beleg_gefunden(antwort.get("beleg", ""), quelle)):
+            antwort["richtig"] = int(antwort["richtig"])
+            fragen.append(antwort)
+    if len(fragen) < 3:
+        sys.exit("Für das Quiz gab es diese Woche zu wenige Videos mit prüfbaren Fakten.")
+    teile = []
+    for i, q in enumerate(fragen, 1):
+        frage_ton, antwort_ton = WORK / f"q{i}.wav", WORK / f"a{i}.wav"
+        opts = q["optionen"]
+        sprechen(f"Frage {i}. {q['frage']} A: {opts[0]}. B: {opts[1]}. Oder C: {opts[2]}?", frage_ton)
+        sprechen(f"Richtig ist {'ABC'[q['richtig']]}: {opts[q['richtig']]}. {q.get('erklaerung', '')}", antwort_ton)
+        teile.append(_bild_clip(_quiz_bild(f"FRAGE {i} VON 3", q["frage"], opts, None, WORK / f"qf{i}.png"), frage_ton,
+                                WORK / f"qf{i}.mp4", extra=3.0))
+        teile.append(_bild_clip(_quiz_bild("AUFLÖSUNG", q["frage"], opts, q["richtig"], WORK / f"qa{i}.png"), antwort_ton,
+                                WORK / f"qa{i}.mp4", extra=0.6))
+    intro_ton, outro_ton = WORK / "q_intro.wav", WORK / "q_outro.wav"
+    sprechen("Quiz der Woche! Drei Fragen zu unseren Fakten. Wie viele schaffst du?", intro_ton)
+    sprechen("Wie viele hattest du richtig? Schreib es in die Kommentare!", outro_ton)
+    teile.insert(0, _bild_clip(story_bild("QUIZ DER WOCHE", "3 Fragen zu den Fakten dieser Woche. Wie viele schaffst du?",
+                                          "@faktenfieber.official", WORK / "q_intro.jpg"), intro_ton, WORK / "q_intro.mp4"))
+    teile.append(_bild_clip(story_bild("UND?", "Wie viele hattest du richtig? Schreib es in die Kommentare!",
+                                       "Folg für mehr Fakten · @faktenfieber.official", WORK / "q_outro.jpg"), outro_ton,
+                            WORK / "q_outro.mp4", extra=0.5))
+    liste = WORK / "q_liste.txt"
+    liste.write_text("".join(f"file '{p.resolve()}'\n" for p in teile))
+    roh = WORK / "quiz_roh.mp4"
+    ffmpeg("-f", "concat", "-safe", "0", "-i", liste, "-c", "copy", roh)
+    gesamt = float(subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(roh)],
+                                  capture_output=True, text=True).stdout or 0)
+    stimme = WORK / "quiz_stimme.wav"
+    ffmpeg("-i", roh, "-vn", "-ar", "44100", "-ac", "2", stimme)
+    daten = {"titel": "Quiz der Woche: Wie viele schaffst du?", "thema": "Quiz der Woche",
+             "beschreibung": "3 Fragen zu den Fakten dieser Woche – ohne zu googeln! Wie viele hattest du richtig?",
+             "kommentar_frage": "Wie viele hattest du richtig – 0, 1, 2 oder alle 3?",
+             "hashtags": ["#quiz", "#fakten", "#wissen", "#faktenfieber", "#allgemeinwissen"],
+             "quellen": ["Wikipedia – Fakten aus den Videos dieser Woche"], "hook_stil": "Quiz", "modus": "fakt",
+             "szenen": [{"text": q["frage"]} for q in fragen], "hook_text": "QUIZ DER WOCHE", "_quelle": "quiz"}
+    musik = musik_waehlen({"titel": "Quiz", "thema": "Quiz", "szenen": []})
+    daten["musiknachweis"] = MUSIKNACHWEIS
+    ton = WORK / "quiz_ton.m4a"
+    audio_mischen(stimme, musik, gesamt, WORK / "quiz_mix.wav")
+    final = OUT / "faktenfieber.mp4"
+    ffmpeg("-i", roh, "-i", WORK / "quiz_mix.wav", "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
+           "-shortest", "-movflags", "+faststart", final)
+    try:
+        cover_erstellen(final, daten["titel"], OUT / "cover.jpg", zeitpunkt=1.0)
+    except Exception as e:
+        log(f"Cover: {e}")
+    check = {"pruefung": [{"behauptung": q["frage"] + " → " + q["optionen"][q["richtig"]], "beleg_im_text": True} for q in fragen],
+             "pruefer": "Zitat-Check"}
+    meta = {**daten, "faktencheck": check, "dauer": round(gesamt, 1)}
+    (OUT / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    return final, daten, check, gesamt
+
+
 def _temp_uguu(video):
     with open(video, "rb") as f:
         r = requests.post("https://uguu.se/upload", timeout=300, files={"files[]": ("faktenfieber.mp4", f, "video/mp4")})
@@ -3160,7 +3515,7 @@ def veroeffentlichen(video, daten, einzeln=True):
 
 # ---------------------------------------------------------------- Modus "test": sofort alles (wie bisher)
 def main():
-    video, daten, check, dauer = erstelle_video()
+    video, daten, check, dauer = quiz_bauen() if QUIZ else erstelle_video()
     telegram_senden(video, daten, check, dauer)
     if os.environ.get("YT_UPLOAD") == "1" or os.environ.get("IG_UPLOAD") == "1":
         veroeffentlichen(video, daten)
@@ -3222,9 +3577,10 @@ def naechster_slot(ab=None):
 # geaendert werden koennen, ohne hinter einem laufenden Video-Bau warten zu muessen.
 EINSTELLUNG_DATEI = ROOT / "data" / "einstellungen.json"
 EINSTELLUNG_KEYS = ("auto", "pause", "story", "serie", "kommentare_an", "ki_bilder", "max_schwierigkeit",
-                    "musik_lautstaerke", "stimme", "zeiten", "zeit_test", "zeit_test_angebot", "zeit_richtung", "auto_antworten")
+                    "musik_lautstaerke", "stimme", "zeiten", "zeit_test", "zeit_test_angebot", "zeit_richtung", "auto_antworten",
+                    "fakt_story", "feier_story", "quiz")
 EINSTELLUNG_BEFEHLE = ("auto_an", "auto_aus", "pause", "weiter", "story", "serie", "kommentare", "kibilder", "musik",
-                       "schwierigkeit", "voice", "zeiten", "autoantwort")
+                       "schwierigkeit", "voice", "zeiten", "autoantwort", "faktstory", "quiz")
 
 
 def einstellungen_alle():
@@ -3345,6 +3701,9 @@ def modus_erstellen():
         log(f"Fuer {slot} gibt es schon ein Video ({eintrag['status']}) – nichts zu tun.")
         return
     global WUNSCH_THEMA, TEIL2, ANDERS_ALS
+    if QUIZ and not einstellungen_alle().get("quiz", True) and not os.environ.get("QUIZ_ERZWINGEN"):
+        log("Quiz der Woche ist ausgeschaltet.")
+        return
     if not WUNSCH_THEMA and eintrag.get("wunsch"):          # "Neu machen" nach /thema: beim Wunschthema bleiben
         WUNSCH_THEMA = eintrag["wunsch"]
         TEIL2 = WUNSCH_THEMA.endswith(" TEIL2")
@@ -3376,6 +3735,8 @@ def modus_erstellen():
                        f"⛔ = nicht posten · ❌ = neues Video · 🚀 = sofort\n\n")
     if auto:
         kopf = kopf_extra
+    elif QUIZ:
+        kopf = kopf_extra + "🧠 QUIZ DER WOCHE – geht raus, sobald du auf 🚀 drückst\n\n"
     elif extra:
         kopf = kopf_extra + (f"⚡ Wunsch-Video zu „{WUNSCH_THEMA}“ – geht raus, sobald du auf 🚀 drückst\n\n"
                              if WUNSCH_THEMA else "⚡ Extra-Video – geht raus, sobald du auf 🚀 drückst\n\n")
@@ -3388,7 +3749,10 @@ def modus_erstellen():
                          "run_id": os.environ.get("GITHUB_RUN_ID", ""),
                          "message_id": msg, "titel": daten["titel"], "thema": daten.get("thema", ""), "extra": extra,
                          "neu_gemacht": eintrag.get("neu_gemacht", 0), "erstellt": jetzt().isoformat(),
-                         "wunsch": WUNSCH_THEMA, "verworfen": ANDERS_ALS}
+                         "wunsch": "" if QUIZ else WUNSCH_THEMA, "verworfen": ANDERS_ALS, "tg_file": daten.get("_tg_file"),
+                         "modus": "quiz" if QUIZ else daten.get("modus", "fakt")}
+    if QUIZ and st.get("auto"):                   # Auto-Modus: Quiz geht beim naechsten Pruef-Lauf von selbst raus
+        st["slots"][slot].update(status="freigegeben", sofort=True, auto=True)
     if daten.get("_fan"):                         # Fan-Wunsch ist umgesetzt -> nicht mehr als offen anzeigen
         w = st.get("fan_wuensche", {}).get(_kurz_id(daten["_fan"].get("thema", "")))
         if w:
@@ -3431,7 +3795,7 @@ def modus_pruefen():
     befehl = os.environ.get("AKTION", "")
     if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht", "idee", "ideen", "ideen_leeren",
                   "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen", "kommentare", "kibilder",
-                  "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset", "autoantwort",
+                  "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset", "autoantwort", "faktstory", "quiz",
                   "fanidee", "fan_weg", "idee_loeschen", "antw_text"):
         befehl_ausfuehren(st, befehl)
         if befehl in EINSTELLUNG_BEFEHLE:
@@ -3514,10 +3878,12 @@ def modus_pruefen():
     except Exception as e:
         log(f"Token-Check: {e}")
 
-    try:
-        trend_alarm(st)
-    except Exception as e:
-        log(f"Trend-Alarm: {e}")
+    for name, fn in (("Trend-Alarm", trend_alarm), ("Meilensteine", meilenstein_check), ("Fakt des Tages", fakt_des_tages),
+                     ("Video-Analyse", video_analyse)):
+        try:
+            fn(st)
+        except Exception as e:
+            log(f"{name}: {e}")
     try:
         archiv_nachtragen(st)
     except Exception as e:
@@ -3602,6 +3968,7 @@ def archiv_eintragen(slot, eintrag, meta, ergebnis):
         "folge": meta.get("_folge"), "fan": (meta.get("_fan") or {}).get("user"), "frage": meta.get("kommentar_frage", ""),
         "catch": meta.get("_hook_punkte"), "faden": meta.get("_roter_faden"), "serie": meta.get("_serie"),
         "schwierigkeit": meta.get("_schwierigkeit"), "modus": meta.get("modus", "fakt"),
+        "text": " ".join(x.get("text", "") for x in meta.get("szenen", []))[:1500],
         "stunde": slot[11:13], "ig": meta.get("_ig_media_id") or eintrag.get("ig_media_id"), "yt": yt,
         "ig_link": ergebnis.get("instagram"), "run_id": eintrag.get("run_id"), "dauer": meta.get("dauer"),
         "stats": {},
@@ -3791,7 +4158,63 @@ def erfolgs_profil(archiv=None, mindestens=6):
         g = gruppe(feld)
         if g:
             teile.append(f"{name}: " + ", ".join(f"{k} {p / mittel * 100:.0f}%" for k, p, n in g[:4]))
+    lektionen = _lade_json(LEKTIONEN_DATEI) or []
+    if lektionen:
+        teile.append("Lektionen aus einzelnen Videos: " + " | ".join(l["lektion"] for l in lektionen[-6:]))
     return "LERNDATEN UNSERES KANALS (100% = Durchschnitt):\n" + "\n".join(teile)
+
+
+LEKTIONEN_DATEI = ROOT / "data" / "lektionen.json"
+
+
+def video_analyse(st):
+    """24 h nach dem Posten: Lief das Video deutlich schlechter oder besser als ueblich? Dann sagt der Bot warum
+    (Einstieg, Thema, Uhrzeit) und merkt sich die Lektion fuer kuenftige Videos. Hits bekommen einen Teil-2-Knopf."""
+    archiv = archiv_laden()
+    mit = [v for v in archiv if v.get("punkte") is not None]
+    if len(mit) < 6:
+        return
+    analysiert = set(st.get("analysiert", []))
+    vergleich = sorted(v["punkte"] for v in mit[-25:])
+    median = vergleich[len(vergleich) // 2] or 1
+    for v in archiv:
+        if v.get("slot") in analysiert or v.get("punkte") is None or v.get("nachgetragen"):
+            continue
+        alter = jetzt() - datetime.fromisoformat(v["gepostet"])
+        if not (timedelta(hours=24) <= alter <= timedelta(hours=72)):
+            continue
+        analysiert.add(v["slot"])
+        faktor = v["punkte"] / median
+        if 0.5 < faktor < 2.0:
+            continue                               # normal gelaufen
+        art = "hit" if faktor >= 2 else "flop"
+        top = sorted(mit, key=lambda x: -x["punkte"])[:5]
+        try:
+            antwort, _ = ki(f"""Analysiere ein Video eines deutschen Fakten-Shorts-Kanals. Es lief {faktor:.1f}x so gut wie
+der Median ({'deutlich BESSER' if art == 'hit' else 'deutlich SCHLECHTER'}).
+Video: Titel "{v.get('titel')}", Thema "{v.get('thema')}", Einstieg-Stil "{v.get('hook_stil')}", Uhrzeit {v.get('stunde')} Uhr,
+Themen-Quelle "{v.get('quelle')}", Catch-Score {v.get('catch')}, Modus {v.get('modus', 'fakt')}, Frage "{v.get('frage')}".
+Zum Vergleich unsere Top-Videos: {"; ".join(f"{x.get('titel')} ({x.get('hook_stil')}, {x.get('stunde')} Uhr)" for x in top)}
+
+Was ist der wahrscheinlichste Grund (Thema, Titel, Einstieg, Uhrzeit)? Sei ehrlich, wenn es auch Zufall sein kann.
+Antworte NUR mit JSON: {{"grund": "1-2 Saetze", "lektion": "eine kurze, allgemeine Regel fuer kuenftige Videos (max. 15 Woerter)"}}""",
+                            temperatur=0.3)
+        except Exception as e:
+            log(f"Video-Analyse nicht moeglich: {e}")
+            continue
+        lektionen = _lade_json(LEKTIONEN_DATEI) or []
+        lektionen.append({"tag": jetzt().date().isoformat(), "art": art, "titel": v.get("titel"),
+                          "lektion": str(antwort.get("lektion", ""))[:150]})
+        LEKTIONEN_DATEI.write_text(json.dumps(lektionen[-30:], ensure_ascii=False, indent=1), encoding="utf-8")
+        if art == "hit":
+            tg("sendMessage", chat_id=TG_CHAT,
+               text=f"🚀 HIT! „{v.get('titel')}“ läuft {faktor:.1f}× besser als üblich.\n\n🧠 Warum: {antwort.get('grund', '')}\n"
+                    f"📌 Gemerkt: {antwort.get('lektion', '')}\n\nJetzt nachlegen, solange es heiß ist?",
+               reply_markup=json.dumps({"inline_keyboard": [[{"text": "🔁 Teil 2 bauen", "callback_data": f"teil2|{v['slot']}"}]]}))
+        else:
+            telegram_text(f"📉 „{v.get('titel')}“ lief schwächer als üblich ({faktor:.1f}×).\n\n🧠 Vermutlich: "
+                          f"{antwort.get('grund', '')}\n📌 Gemerkt für die nächsten Videos: {antwort.get('lektion', '')}")
+    st["analysiert"] = list(analysiert)[-200:]
 
 
 # ================================================================ Kommentare beantworten
@@ -3979,6 +4402,10 @@ def statistik_senden(st, wochenbericht=False):
             zeiten_vorschlag(st, archiv)
         except Exception as e:
             log(f"Zeiten-Vorschlag: {e}")
+        try:
+            remaster_vorschlag(st, archiv)
+        except Exception as e:
+            log(f"Remaster-Vorschlag: {e}")
         try:
             ziel_senden()
         except Exception as e:
@@ -4569,6 +4996,14 @@ def befehl_ausfuehren(st, befehl):
                       f"ℹ️ Eigene Reels liken oder reposten erlaubt Instagram über die Schnittstelle nicht – "
                       f"die Story ist der offizielle Weg dafür.")
         return
+    if befehl in ("faktstory", "quiz"):
+        wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+        key = {"faktstory": "fakt_story", "quiz": "quiz"}[befehl]
+        if wahl in ("an", "aus"):
+            st[key] = wahl == "an"
+        name = {"faktstory": "📲 Fakt des Tages (Story jeden Abend)", "quiz": "🧠 Quiz der Woche (sonntags)"}[befehl]
+        telegram_text(f"{name}: {'AN' if st.get(key, True) else 'AUS'}  (/{befehl} an · /{befehl} aus)")
+        return
     if befehl == "autoantwort":
         wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
         if wahl in ("an", "aus"):
@@ -4775,7 +5210,7 @@ def aktion_verarbeiten(st, aktion, slot, cb_id=None, vom_tuersteher=False):
         tg("editMessageReplyMarkup", chat_id=TG_CHAT, message_id=eintrag.get("message_id"),
            reply_markup=json.dumps({"inline_keyboard": [[{"text": "❌ Verworfen", "callback_data": "x"}]]}))
         status_speichern(st)                      # damit der neue Lauf den Status sieht
-        if _neu_starten(slot, eintrag.get("wunsch") or ""):
+        if _neu_starten(slot, "__QUIZ__" if eintrag.get("modus") == "quiz" else (eintrag.get("wunsch") or "")):
             if not vom_tuersteher:                # der Tuersteher hat das schon bestaetigt
                 telegram_text(f"🔄 Baue ein neues Video für {uhr} Uhr. Kommt in ca. 10–15 Minuten.")
         else:
