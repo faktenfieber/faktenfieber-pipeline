@@ -29,8 +29,8 @@ WORK = ROOT / "work"
 USED_FILE = ROOT / "data" / "used_topics.json"
 
 W, H, FPS = 1080, 1920, 30
-MAX_DAUER = 58.0                       # Sekunden, Shorts bleiben unter 60
-MAX_WOERTER = 125
+MAX_DAUER = 75.0                       # Sekunden (Shorts/Reels duerfen laenger als 60 s sein - mehr Platz zum Erklaeren)
+MAX_WOERTER = 160
 MAX_SEGMENT = float(os.environ.get("SCHNITT_SEKUNDEN", "3.0"))   # spaetestens alle X s ein neues Bild
 VOICE_NAME = os.environ.get("PIPER_VOICE", "de_DE-thorsten-high")
 LENGTH_SCALE = float(os.environ.get("VOICE_SPEED", "0.92"))   # <1 = schneller
@@ -1035,12 +1035,18 @@ ECHTE BILDER ZUM THEMA (Nummer: Beschreibung):
 {bildliste}
 
 STIL:
-- 90 bis 110 Woerter gesprochener Text (ca. 45-52 Sekunden). NIEMALS mehr als 120 Woerter! Jedes Wort muss sitzen.
+- 120 bis 145 Woerter gesprochener Text (ca. 55-70 Sekunden). NIEMALS mehr als 155 Woerter! Jedes Wort muss sitzen.
+  Die zusaetzliche Zeit ist fuer ERKLAEREN da, nicht fuer mehr Fakten: lieber weniger Fakten, dafuer jeden richtig verstaendlich.
 - EINSTIEG (die ersten 2 Sekunden entscheiden, ob jemand weiterwischt!): Du entscheidest selbst, wie du anfaengst.
   Er muss sofort neugierig machen und darf NICHT langweilig oder erklaerend beginnen. Moegliche Hook-Stile:
 {HOOK_STILE_TEXT}
   Zuletzt benutzt (bitte NICHT schon wieder): {HOOK_ZULETZT}
   Gib den gewaehlten Stil in "hook_stil" an. Nicht immer mit "Wusstest du" anfangen.
+- ERKLAER-PFLICHT (das Wichtigste nach dem Einstieg!):
+  * Direkt nach dem Hook 1-2 Saetze Einordnung: Was ist das ueberhaupt, wo und wann? In Alltagssprache.
+  * Zu jedem wichtigen Fakt das WARUM oder WIE dazu ("Das lag daran, dass ...", "Der Grund: ...", "Das heisst konkret: ...").
+  * Mindestens ein Vergleich, den sich jeder vorstellen kann (Groesse, Zeit, Preis, Gefuehl) - mit Zahlen aus den Quellen.
+  * Am Ende muss der Zuschauer das Thema einem Freund in zwei Saetzen erklaeren koennen.
 - GUT ERKLAEREN: Der Zuschauer weiss NICHTS ueber das Thema. Mach klar, WAS es ist, WO und WANN,
   und WARUM es so besonders oder verrueckt ist. Konkrete Zahlen und Details aus dem Artikel nennen.
   ROTER FADEN: Erzaehl EINE Geschichte, keine Faktenliste. Jeder Satz knuepft an den vorherigen an
@@ -1075,7 +1081,7 @@ STIL:
   Nichts, was jeder schon weiss. Keine Werbung fuer Firmen, neutral bleiben.{WUNSCH_HINWEIS}
 - Kurze, lebendige Saetze, Du-Ansprache, locker aber nicht cringe (keine Jugendwoerter erzwingen). Keine Emojis, keine Klammern,
   keine Abkuerzungen, keine Sonderzeichen. Der Text wird von einer Computerstimme vorgelesen.
-- 8 bis 12 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
+- 10 bis 15 Szenen, jede Szene genau EIN kurzer Satz (fuer schnelle Schnitte).
 - VIRAL-REGELN:
   * Der erste Satz enthaelt SOFORT den krassesten Fakt. Kein Anlauf, keine Einleitung, max. 12 Woerter.
     Verboten als Einstieg: "Heute", "In diesem Video", "Hast du schon mal", "Lass uns", "Es war einmal".
@@ -1266,8 +1272,8 @@ Antworte NUR mit JSON: {{"passt": 1-10, "fehlt": "was am Wunsch fehlt oder zu ku
     try:
         neu, modell = ki(f"""Schreib dieses Short-Skript so um, dass es GENAU den Wunsch "{w}" behandelt.
 Was fehlt: {urteil.get('fehlt', '')}
-Regeln: nur Fakten aus den QUELLEN, jede Behauptung mit woertlichem Zitat als "beleg" (Originalsprache), 90-110 Woerter,
-8-12 Szenen mit je einem kurzen Satz, starker erster Satz, der direkt auf den Wunsch zielt, Titel max. 45 Zeichen ohne
+Regeln: nur Fakten aus den QUELLEN, jede Behauptung mit woertlichem Zitat als "beleg" (Originalsprache), 120-145 Woerter,
+10-15 Szenen mit je einem kurzen Satz, jeder wichtige Fakt mit kurzem Warum/Wie erklaert, starker erster Satz, der direkt auf den Wunsch zielt, Titel max. 45 Zeichen ohne
 Doppelpunkt. Theorien klar als Theorien kennzeichnen. Felder "bilder" und "suchbegriff_en" pro Szene beibehalten/neu setzen.
 
 QUELLEN:
@@ -1447,7 +1453,7 @@ def faktencheck(daten):
     if anzahl > MAX_WOERTER:
         log(f"Stufe 0: Text zu lang ({anzahl} Woerter)")
         return False, {"pruefung": [], "gesamt": "nicht_ok",
-                       "reparieren": [f"Der Text ist mit {anzahl} Woertern zu lang. Kuerze ihn auf hoechstens 100 Woerter, "
+                       "reparieren": [f"Der Text ist mit {anzahl} Woertern zu lang. Kuerze ihn auf hoechstens 140 Woerter, "
                                       f"indem du unwichtige Saetze streichst. Hook und Pointe bleiben."]}
     # Stufe 0b: Ist das ohne Vorwissen verstaendlich?
     sprech = " ".join(s["text"] for s in daten.get("szenen", []))
@@ -1534,7 +1540,7 @@ def reparieren(daten, ergebnis):
     prompt = f"""Ein Faktenpruefer hat Fehler in diesem Video-Skript gefunden. Korrigiere NUR diese Stellen.
 Fehlerhafte Saetze entweder streng nach dem Artikel umschreiben oder ganz streichen. Nichts Neues erfinden.
 Jede Behauptung braucht als "beleg" ein EXAKTES, woertliches Zitat aus den Quellen (Copy-Paste in Originalsprache).
-Erster und letzter Satz nur aendern, wenn sie selbst fehlerhaft sind (sie wurden extra fuer Catch und Loop optimiert). Gesamtlaenge 90 bis 110 Woerter, NIEMALS mehr als 120. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
+Erster und letzter Satz nur aendern, wenn sie selbst fehlerhaft sind (sie wurden extra fuer Catch und Loop optimiert). Gesamtlaenge 120 bis 145 Woerter, NIEMALS mehr als 155. Felder "bilder", "suchbegriff_en", "hook_text" und "kommentar_frage" beibehalten.
 
 GEFUNDENE FEHLER:
 {chr(10).join('- ' + str(p) for p in probleme)}
@@ -3216,9 +3222,9 @@ def naechster_slot(ab=None):
 # geaendert werden koennen, ohne hinter einem laufenden Video-Bau warten zu muessen.
 EINSTELLUNG_DATEI = ROOT / "data" / "einstellungen.json"
 EINSTELLUNG_KEYS = ("auto", "pause", "story", "serie", "kommentare_an", "ki_bilder", "max_schwierigkeit",
-                    "musik_lautstaerke", "stimme", "zeiten", "zeit_test", "zeit_test_angebot", "zeit_richtung")
+                    "musik_lautstaerke", "stimme", "zeiten", "zeit_test", "zeit_test_angebot", "zeit_richtung", "auto_antworten")
 EINSTELLUNG_BEFEHLE = ("auto_an", "auto_aus", "pause", "weiter", "story", "serie", "kommentare", "kibilder", "musik",
-                       "schwierigkeit", "voice", "zeiten")
+                       "schwierigkeit", "voice", "zeiten", "autoantwort")
 
 
 def einstellungen_alle():
@@ -3425,7 +3431,7 @@ def modus_pruefen():
     befehl = os.environ.get("AKTION", "")
     if befehl in ("pause", "weiter", "status", "schwierigkeit", "stats", "wochenbericht", "idee", "ideen", "ideen_leeren",
                   "auto_an", "auto_aus", "notstopp", "voice", "musik", "einstellungen", "kommentare", "kibilder",
-                  "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset",
+                  "dashboard", "serie", "ziel", "story", "admin_pin", "admin_reset", "autoantwort",
                   "fanidee", "fan_weg", "idee_loeschen", "antw_text"):
         befehl_ausfuehren(st, befehl)
         if befehl in EINSTELLUNG_BEFEHLE:
@@ -3794,7 +3800,8 @@ def kommentare_pruefen(st):
     if not (IG_TOKEN and IG_USER) or not st.get("kommentare_an", True):
         return
     letzte = st.get("kommentare_check")
-    if letzte and jetzt() - datetime.fromisoformat(letzte) < timedelta(hours=2):
+    abstand = timedelta(minutes=40) if st.get("auto_antworten") else timedelta(hours=2)
+    if letzte and jetzt() - datetime.fromisoformat(letzte) < abstand:
         return
     st["kommentare_check"] = jetzt().isoformat()
     gesehen = set(st.get("kommentare_gesehen", []))
@@ -3828,7 +3835,8 @@ def kommentare_pruefen(st):
         if spam.search(k.get("text", "")):
             gesehen.add(k["id"])                   # Links/Spam gar nicht erst vorschlagen
     neue = [(v, k) for v, k in neue if k["id"] not in gesehen]
-    for v, k in neue[:5]:                         # nicht mehr als 5 auf einmal
+    auto_gesendet, auto_liste = 0, []
+    for v, k in neue[:20 if st.get("auto_antworten") else 5]:
         gesehen.add(k["id"])
         try:
             vorschlag, _ = ki(f"""Du betreust den deutschen Fakten-Kanal FAKTENFIEBER auf Instagram.
@@ -3838,10 +3846,14 @@ Kommentar von @{k.get('username')}: "{k.get('text', '')[:400]}"
 Schreib eine kurze, sympathische Antwort (max. 2 Saetze, locker, Du-Form, 0-1 Emoji). Bei Fragen: ehrlich antworten,
 nur mit dem, was zum Thema sicher stimmt; im Zweifel neugierig zurueckfragen. Keine Werbung, keine Diskussionen.
 Spam, Beleidigungen, Hass oder Links -> "ignorieren": true.
+"sicher": true NUR, wenn die Antwort risikolos automatisch gepostet werden kann: Lob, Dank, Emojis, einfache Reaktionen
+("krass!", "wusste ich nicht"), Raten/Meinung zur Video-Frage, Themenwuensche. "sicher": false bei Kritik, Fehler-Hinweisen,
+Streit, Politik, Religion, persoenlichen/ernsten Themen, Fragen, deren Antwort Fakten ueber das Video hinaus braucht, oder
+wenn du unsicher bist. Die Antwort darf keine neuen Fakten behaupten, die nicht im Video vorkommen.
 Zusaetzlich: Wuenscht sich die Person ein THEMA fuer ein naechstes Video ("mach mal was ueber ...")? -> "themenwunsch":
 konkretes Thema in 1-5 Woertern, sonst null. Will sie MEHR zu diesem Video (Teil 2, mehr davon, weiter)? -> "will_mehr": true.
 
-Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false, "themenwunsch": "..." oder null, "will_mehr": true/false}}""", temperatur=0.7)
+Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false, "sicher": true/false, "themenwunsch": "..." oder null, "will_mehr": true/false}}""", temperatur=0.7)
         except Exception as e:
             log(f"Kommentar-Vorschlag nicht moeglich: {e}")
             continue
@@ -3867,6 +3879,13 @@ Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false, "themenwuns
                    reply_markup=json.dumps({"inline_keyboard": [[{"text": "🔁 Teil 2 bauen", "callback_data": f"teil2|{v['slot']}"}]]}))
         if vorschlag.get("ignorieren") or not vorschlag.get("antwort"):
             continue
+        if st.get("auto_antworten") and vorschlag.get("sicher") is True and auto_gesendet < 15:
+            r = requests.post(f"{IG_API}/{k['id']}/replies", timeout=30,
+                              data={"message": vorschlag["antwort"][:300], "access_token": IG_TOKEN})
+            if r.status_code == 200:
+                auto_gesendet += 1
+                auto_liste.append(f"@{k.get('username')}: „{k.get('text', '')[:60]}“\n   ↳ {vorschlag['antwort'][:80]}")
+                continue                           # erledigt - nicht mehr zur Freigabe schicken
         st.setdefault("antworten", {})[k["id"]] = {"text": vorschlag["antwort"][:300], "titel": v.get("titel", ""),
                                                    "user": k.get("username", ""), "kommentar": k.get("text", "")[:300],
                                                    "am": jetzt().isoformat()}
@@ -3875,6 +3894,9 @@ Antworte NUR mit JSON: {{"antwort": "...", "ignorieren": true/false, "themenwuns
                 f"🤖 Vorschlag:\n{vorschlag['antwort'][:300]}",
            reply_markup=json.dumps({"inline_keyboard": [[{"text": "✅ So antworten", "callback_data": f"antw|{k['id']}"},
                                                          {"text": "🙈 Ignorieren", "callback_data": f"ign|{k['id']}"}]]}))
+    if auto_liste:
+        telegram_text(f"🤖 {len(auto_liste)} Kommentar(e) automatisch beantwortet:\n\n" + "\n\n".join(auto_liste[:10])
+                      + "\n\n(Heikle Kommentare kommen weiter zur Freigabe zu dir · /autoantwort aus zum Abschalten)")
     st["kommentare_gesehen"] = list(gesehen)[-500:]
     st["antworten"] = dict(list(st.get("antworten", {}).items())[-50:])
     st["fan_wuensche"] = dict(list(st.get("fan_wuensche", {}).items())[-40:])
@@ -4470,6 +4492,7 @@ def befehl_ausfuehren(st, befehl):
                       f"🧠 Schwierigkeit: {st.get('max_schwierigkeit', MAX_SCHWIERIGKEIT)}\n"
                       f"📺 Themen-Tage: {'an' if st.get('serie') else 'aus'}\n"
                       f"💬 Kommentar-Vorschläge: {'an' if st.get('kommentare_an', True) else 'aus'}\n"
+                      f"🤖 Auto-Antworten: {'an' if st.get('auto_antworten') else 'aus'}\n"
                       f"📲 Auto-Story: {'an' if st.get('story', True) else 'aus'}\n"
                       f"🎨 KI-Illustrationen: {'an' if st.get('ki_bilder', True) else 'aus'}\n"
                       f"📊 Dashboard: {'an' if st.get('dashboard') else 'aus'}\n"
@@ -4545,6 +4568,17 @@ def befehl_ausfuehren(st, befehl):
                       f"Story geteilt, damit es alle Follower nochmal sehen. (/story an · /story aus)\n"
                       f"ℹ️ Eigene Reels liken oder reposten erlaubt Instagram über die Schnittstelle nicht – "
                       f"die Story ist der offizielle Weg dafür.")
+        return
+    if befehl == "autoantwort":
+        wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
+        if wahl in ("an", "aus"):
+            st["auto_antworten"] = wahl == "an"
+            if wahl == "an":
+                st["kommentare_an"] = True
+        telegram_text(f"🤖 Automatische Kommentar-Antworten sind {'AN' if st.get('auto_antworten') else 'AUS'}.\n"
+                      "AN: Lob, Dank, Reaktionen und Rate-Antworten beantwortet der Bot selbst (alle ~40 Min., du bekommst "
+                      "eine Zusammenfassung). Kritik, Fehler-Hinweise und heikle Themen kommen weiter zur Freigabe zu dir.\n"
+                      "/autoantwort an · /autoantwort aus")
         return
     if befehl == "kommentare":
         wahl = os.environ.get("AKTION_SLOT", "").strip().lower()
