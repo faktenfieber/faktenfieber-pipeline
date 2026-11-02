@@ -525,7 +525,7 @@
    "gepostet_um": "2026-11-02T11:57:32.805402+01:00"
   },
   "2026-11-02 18:00": {
-   "status": "freigegeben",
+   "status": "gepostet",
    "auto": true,
    "run_id": "41462644530",
    "message_id": 335,
@@ -537,7 +537,13 @@
    "wunsch": "Können Pflanzen miteinander kommunizieren?",
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAIBTmroodBGHMdCm9VD0GIsz1pgYsIKAAKEHQACzMtBU_DTaDLvIvxlPQQ",
-   "modus": "fakt"
+   "modus": "fakt",
+   "links": {
+    "youtube": "https://youtube.com/shorts/5SThY49fTGA",
+    "instagram": "https://www.instagram.com/reel/DfPygMeCvqX/"
+   },
+   "ig_media_id": "17898644595680842",
+   "gepostet_um": "2026-11-02T17:58:29.206790+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
@@ -569,20 +575,21 @@
   "ig_follower": 0
  },
  "analysiert": [
-  "2026-11-01 16:21",
   "2026-10-31 12:00",
-  "2026-10-29 19:07",
-  "2026-10-30 15:48",
-  "2026-11-01 12:00",
-  "2026-10-29 23:22",
-  "2026-11-01 08:00",
-  "2026-10-31 18:00",
   "2026-10-31 19:28",
-  "2026-10-30 18:00",
   "2026-10-31 08:00",
+  "2026-10-31 18:00",
+  "2026-11-01 08:00",
+  "2026-10-29 19:07",
   "2026-10-30 12:00",
+  "2026-10-29 23:22",
+  "2026-10-30 18:00",
   "2026-10-30 20:28",
-  "2026-10-30 08:00"
+  "2026-11-01 18:00",
+  "2026-11-01 16:21",
+  "2026-10-30 15:48",
+  "2026-10-30 08:00",
+  "2026-11-01 12:00"
  ],
  "fakt_story_tag": "2026-11-01"
 }

@@ -774,5 +774,36 @@
   },
   "punkte": 50.2,
   "stats_am": "2026-11-02T17:41:23.604832+01:00"
+ },
+ {
+  "slot": "2026-11-02 18:00",
+  "gepostet": "2026-11-02T17:58:29.207429+01:00",
+  "titel": "Können Pflanzen miteinander kommunizieren?",
+  "thema": "Baum",
+  "hook_stil": "Mythos-Check",
+  "stimme": "Charon",
+  "quelle": "suche",
+  "folge": 32,
+  "fan": null,
+  "frage": "Was glaubst du, wie lange ein Baum lebt?",
+  "catch": 8,
+  "faden": 5,
+  "serie": null,
+  "schwierigkeit": 7.0,
+  "modus": "fakt",
+  "text": "Pflanzen senden chemische Signale als Warnung. Duftstoffe warnen vor Fraßfeinden. Wurzeln sind über Pilze verbunden. Dieses Netzwerk nennt man Mykorrhiza. Es bringt Nährstoffe zwischen Bäumen hin. Angeblich füttern starke Bäume schwache Nachbarn. Das ist eine symbiotische Strategie. Stämme leiten Stoffe im Inneren weiter. Blätter wandeln Licht in Zucker um. Dieser Zucker dient dem Wachstum. Bäume speichern Kohlenstoff im Gewebe. Sie entfernen CO2 aus der Luft. Wurzeln verankern den Baum tief. Sie ziehen Wasser aus dem Boden. So kommunizieren sie über das Netz.",
+  "stunde": "18",
+  "ig": "17898644595680842",
+  "yt": "5SThY49fTGA",
+  "ig_link": "https://www.instagram.com/reel/DfPygMeCvqX/",
+  "run_id": "41462644530",
+  "dauer": 44.1,
+  "stats": {
+   "likes": 0,
+   "kommentare": 1,
+   "aufrufe": 0
+  },
+  "punkte": 3.0,
+  "stats_am": "2026-11-02T17:58:30.470325+01:00"
  }
 ]
