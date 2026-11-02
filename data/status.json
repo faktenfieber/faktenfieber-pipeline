@@ -475,7 +475,7 @@
    "modus": "fakt"
   },
   "2026-11-02 07:09": {
-   "status": "wartet",
+   "status": "gepostet",
    "auto": false,
    "run_id": "41398121409",
    "message_id": 327,
@@ -487,7 +487,15 @@
    "wunsch": "Rebecca (1940)",
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAIBRmroKoBvEkgJ3RQJ_tdcfhLcZKXmAAK4HAACzMtBU5Yuz5Hm5WMXPQQ",
-   "modus": "fakt"
+   "modus": "fakt",
+   "sofort": true,
+   "fehler": 0,
+   "links": {
+    "youtube": "https://youtube.com/shorts/h7aGyWmA47E",
+    "instagram": "https://www.instagram.com/reel/DfOp-SGiS57/"
+   },
+   "ig_media_id": "18022021634730542",
+   "gepostet_um": "2026-11-02T07:25:04.635159+01:00"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
@@ -519,17 +527,17 @@
   "ig_follower": 0
  },
  "analysiert": [
-  "2026-10-30 18:00",
-  "2026-10-31 12:00",
-  "2026-10-29 23:22",
   "2026-10-31 18:00",
-  "2026-10-31 08:00",
-  "2026-10-30 20:28",
+  "2026-10-30 18:00",
   "2026-10-30 15:48",
+  "2026-10-29 19:07",
+  "2026-10-31 12:00",
   "2026-10-31 19:28",
   "2026-10-30 12:00",
-  "2026-10-29 19:07",
-  "2026-10-30 08:00"
+  "2026-10-29 23:22",
+  "2026-10-30 20:28",
+  "2026-10-30 08:00",
+  "2026-10-31 08:00"
  ],
  "fakt_story_tag": "2026-11-01"
 }
