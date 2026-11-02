@@ -473,6 +473,21 @@
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAIBQ2roE4Kh5_m65L-heZnxY4-FbksZAAKOHAACzMtBU53RL4DnyT5XPQQ",
    "modus": "fakt"
+  },
+  "2026-11-02 07:09": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "41398121409",
+   "message_id": 327,
+   "titel": "Rebecca 1940 – Hitchcock's Oscar‑Glanz",
+   "thema": "Rebecca (1940)",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-02T07:15:28.883470+01:00",
+   "wunsch": "Rebecca (1940)",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBRmroKoBvEkgJ3RQJ_tdcfhLcZKXmAAK4HAACzMtBU5Yuz5Hm5WMXPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
