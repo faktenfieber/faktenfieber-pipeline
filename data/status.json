@@ -523,6 +523,21 @@
    },
    "ig_media_id": "18057120569587453",
    "gepostet_um": "2026-11-02T11:57:32.805402+01:00"
+  },
+  "2026-11-02 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41462644530",
+   "message_id": 335,
+   "titel": "Können Pflanzen miteinander kommunizieren?",
+   "thema": "Baum",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-02T15:44:33.120077+01:00",
+   "wunsch": "Können Pflanzen miteinander kommunizieren?",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBTmroodBGHMdCm9VD0GIsz1pgYsIKAAKEHQACzMtBU_DTaDLvIvxlPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
