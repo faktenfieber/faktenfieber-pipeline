@@ -799,11 +799,13 @@
   "run_id": "41462644530",
   "dauer": 44.1,
   "stats": {
-   "likes": 0,
+   "likes": 2,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 5,
+   "yt_aufrufe": 0,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-02T17:58:30.470325+01:00"
+  "punkte": 5.2,
+  "stats_am": "2026-11-02T19:00:59.899592+01:00"
  }
 ]
