@@ -458,6 +458,21 @@
    },
    "ig_media_id": "17916141237542556",
    "gepostet_um": "2026-11-01T17:58:01.939192+01:00"
+  },
+  "2026-11-02 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41388873051",
+   "message_id": 324,
+   "titel": "Die Qualle, die nie alt wird",
+   "thema": "Turritopsis dohrnii",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-02T05:37:22.713847+01:00",
+   "wunsch": "Das möglicherweise unsterbliche Tier",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBQ2roE4Kh5_m65L-heZnxY4-FbksZAAKOHAACzMtBU53RL4DnyT5XPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
