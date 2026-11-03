@@ -588,6 +588,21 @@
    },
    "ig_media_id": "17900703987608596",
    "gepostet_um": "2026-11-03T07:23:06.880828+01:00"
+  },
+  "2026-11-03 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41612842739",
+   "message_id": 353,
+   "titel": "Zwei Bomben, ein Mann",
+   "thema": "Tsutomu Yamaguchi",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-03T10:44:17.239954+01:00",
+   "wunsch": "Der Mann, der zwei Atombomben überlebte",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBYGrprPDMbKyUmnB58YN-13HHAjBsAALYIQACWyNJU5FsuuTqKAlRPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
