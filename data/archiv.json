@@ -834,10 +834,12 @@
   "stats": {
    "likes": 0,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 12,
+   "yt_aufrufe": 3,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-03T07:23:08.125480+01:00"
+  "punkte": 3.8,
+  "stats_am": "2026-11-03T08:30:03.558266+01:00"
  },
  {
   "slot": "2026-11-03 08:00",
