@@ -900,9 +900,11 @@
   "stats": {
    "likes": 0,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 27,
+   "yt_aufrufe": 0,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-03T11:58:08.759563+01:00"
+  "punkte": 4.3,
+  "stats_am": "2026-11-03T13:00:02.756400+01:00"
  }
 ]
