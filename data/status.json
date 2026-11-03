@@ -559,6 +559,21 @@
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAIBUmrpZjZVPw9vQ5KMPhV3RuIS5IGFAAKRIQACWyNJUygO5pMwpTJXPQQ",
    "modus": "fakt"
+  },
+  "2026-11-03 07:07": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "41587886631",
+   "message_id": 343,
+   "titel": "Babylons nie vollendetes Blau‑Tor",
+   "thema": "Ischtar-Tor",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-03T07:13:42.569297+01:00",
+   "wunsch": "Ischtar-Tor",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBVmrpe5YPbkgt2iEnY3LlqnOpPzgkAAKiIQACWyNJU0GT_OQjhNuKPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
