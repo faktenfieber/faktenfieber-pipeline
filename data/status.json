@@ -609,6 +609,21 @@
    },
    "ig_media_id": "17888757612623907",
    "gepostet_um": "2026-11-03T11:58:06.936225+01:00"
+  },
+  "2026-11-03 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41654396294",
+   "message_id": 356,
+   "titel": "Das Geheimnis der Titanic enthüllt",
+   "thema": "Titan (U-Boot)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-03T15:37:28.778586+01:00",
+   "wunsch": "Das Geheimnis der Titanic",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBY2rp8ag3QUeLEcmtmz1zspR-D579AAKQIAACWyNRU6zJ10R4Tfs3PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
