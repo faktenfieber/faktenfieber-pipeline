@@ -906,5 +906,36 @@
   },
   "punkte": 12.2,
   "stats_am": "2026-11-03T17:41:09.980225+01:00"
+ },
+ {
+  "slot": "2026-11-03 18:00",
+  "gepostet": "2026-11-03T17:58:59.197780+01:00",
+  "titel": "Das Geheimnis der Titanic enthüllt",
+  "thema": "Titan (U-Boot)",
+  "hook_stil": "Wusstest du",
+  "stimme": "Charon",
+  "quelle": "ideen",
+  "folge": 36,
+  "fan": null,
+  "frage": "Hättest du solche Tourfahrten gebucht?",
+  "catch": 9,
+  "faden": 6,
+  "serie": null,
+  "schwierigkeit": 6.6,
+  "modus": "fakt",
+  "text": "Das Rätsel liegt im Titanic‑Wrack, nicht im U‑Boot. Titan war ein Tiefsee‑U‑Boot, das seit 2021 zur Titanic fuhr. Die Titanic liegt etwa 3 800 Meter tief. OceanGate nutzte Titan, um das Wrack zu untersuchen. Am 18. Juni 2023 implodierte Titan vor dem Wrack. Alle fünf Personen starben, was die Suche erschwert. Trümmer wurden vier Tage später nahe der Titanic gefunden. Theorie 1: Abnutzung der Hülle könnte die Implosion verursacht haben. Theorie 2: Fehlende Prüfung und schlechtes Sicherheitsverhalten erhöhten das Risiko. Bis dahin bleibt die Titanic‑Geschichte ein Symbol für Hybris.",
+  "stunde": "18",
+  "ig": "18037096658892928",
+  "yt": "zF0gVxTzXmo",
+  "ig_link": "https://www.instagram.com/reel/DfSXVjYCLUt/",
+  "run_id": "41654396294",
+  "dauer": 47.9,
+  "stats": {
+   "likes": 0,
+   "kommentare": 1,
+   "aufrufe": 0
+  },
+  "punkte": 3.0,
+  "stats_am": "2026-11-03T17:59:00.671969+01:00"
  }
 ]
