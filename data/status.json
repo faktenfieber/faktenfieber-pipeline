@@ -544,6 +544,21 @@
    },
    "ig_media_id": "17898644595680842",
    "gepostet_um": "2026-11-02T17:58:29.206790+01:00"
+  },
+  "2026-11-03 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41578540417",
+   "message_id": 339,
+   "titel": "Mutterverlust, Hollywood‑Hit",
+   "thema": "Benno Fürmann",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-03T05:42:31.297646+01:00",
+   "wunsch": "Warum Haie älter als Bäume sind",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBUmrpZjZVPw9vQ5KMPhV3RuIS5IGFAAKRIQACWyNJUygO5pMwpTJXPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
