@@ -645,6 +645,21 @@
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAIBZmrqtrlj3XJqvfeWPdwk0y3E0kCJAAK0JQACWyNZUxj5dTJO3MQePQQ",
    "modus": "raetsel"
+  },
+  "2026-11-04 07:10": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "41783640267",
+   "message_id": 363,
+   "titel": "Der Film Die purpurnen Flüsse",
+   "thema": "Die purpurnen Flüsse (Fernsehserie)",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-04T07:13:30.912858+01:00",
+   "wunsch": "Die purpurnen Flüsse (Film)",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBamrqzQrg_i1XAZHIvzFCrz1C_R2dAAK5JQACWyNZU3LYDOcVbBfWPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
