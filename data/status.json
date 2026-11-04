@@ -674,6 +674,21 @@
    },
    "ig_media_id": "18125847835907866",
    "gepostet_um": "2026-11-04T07:29:11.062445+01:00"
+  },
+  "2026-11-04 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41811897958",
+   "message_id": 373,
+   "titel": "Warum die Mary Celeste kein Geisterschiff war",
+   "thema": "Ourang Medan",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-04T11:11:10.057653+01:00",
+   "wunsch": "Die Mary Celeste",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBdGrrBL2iNMXiczFt5mVuQbYry8ARAALrIAACE0VZU__rzu_jRPPBPQQ",
+   "modus": "raetsel"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
