@@ -1063,11 +1063,13 @@
   "run_id": "41848285967",
   "dauer": 73.4,
   "stats": {
-   "likes": 0,
+   "likes": 1,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 8,
+   "yt_aufrufe": 0,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-04T17:59:44.597482+01:00"
+  "punkte": 4.4,
+  "stats_am": "2026-11-04T19:01:03.225768+01:00"
  }
 ]
