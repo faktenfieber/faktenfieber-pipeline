@@ -966,10 +966,12 @@
   "stats": {
    "likes": 0,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 6,
+   "yt_aufrufe": 0,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-04T07:29:12.166098+01:00"
+  "punkte": 3.3,
+  "stats_am": "2026-11-04T08:34:46.644059+01:00"
  },
  {
   "slot": "2026-11-04 08:00",
