@@ -630,6 +630,21 @@
    },
    "ig_media_id": "18037096658892928",
    "gepostet_um": "2026-11-03T17:58:59.197390+01:00"
+  },
+  "2026-11-04 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41773638532",
+   "message_id": 359,
+   "titel": "Das Rätsel des Dyatlov‑Passes",
+   "thema": "Unglück am Djatlow-Pass",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-04T05:38:17.685434+01:00",
+   "wunsch": "Das Rätsel des Dyatlov-Passes",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBZmrqtrlj3XJqvfeWPdwk0y3E0kCJAAK0JQACWyNZUxj5dTJO3MQePQQ",
+   "modus": "raetsel"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
