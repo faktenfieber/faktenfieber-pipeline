@@ -695,6 +695,21 @@
    },
    "ig_media_id": "17927032257433552",
    "gepostet_um": "2026-11-04T11:57:30.530197+01:00"
+  },
+  "2026-11-04 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41848285967",
+   "message_id": 377,
+   "titel": "Das leuchtende Geheimnis von Hessdalen",
+   "thema": "Hessdalen",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-04T15:35:27.776867+01:00",
+   "wunsch": "Die geheimnisvollen Lichter von Hessdalen",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBeGrrQq8k8b427iN-4HIwXqTjcMacAAJlIQACE0VZU4GJ5CXcxdCUPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
