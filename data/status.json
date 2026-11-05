@@ -1,16 +1,6 @@
 {
  "tg_offset": 0,
  "slots": {
-  "2026-10-29 15:00": {
-   "status": "verfallen",
-   "run_id": "40887112639",
-   "message_id": 125,
-   "titel": "Warum das iPhone SE 2022 teurer ist als du denkst",
-   "thema": "IPhone SE (3. Generation)",
-   "extra": true,
-   "neu_gemacht": 0,
-   "erstellt": "2026-10-29T15:06:25.525319+01:00"
-  },
   "2026-10-29 18:00": {
    "status": "gepostet",
    "run_id": "40893710343",
@@ -634,6 +624,21 @@
    },
    "ig_media_id": "18023832206930444",
    "gepostet_um": "2026-11-05T11:58:33.929177+01:00"
+  },
+  "2026-11-05 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42045711943",
+   "message_id": 389,
+   "titel": "Alle Gletscher schmelzen? So steigt das Meer",
+   "thema": "Bergsturz von Blatten",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-05T15:45:29.449952+01:00",
+   "wunsch": "Was passiert, wenn alle Gletscher schmelzen?",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBhGrslokjoRIR84CDZDXFCfPtfBDPAALSIQACE0VpUzJuatcgXEOaPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
