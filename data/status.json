@@ -641,6 +641,21 @@
    },
    "ig_media_id": "18000297777009954",
    "gepostet_um": "2026-11-04T17:59:43.265159+01:00"
+  },
+  "2026-11-05 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "41968250172",
+   "message_id": 380,
+   "titel": "1245 Folgen – der Wissensmarathon",
+   "thema": "Wissen vor acht/Episodenliste",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-05T05:38:36.924667+01:00",
+   "wunsch": "Warum Flugzeugfenster kleine Löcher haben",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBe2rsCEyzXw2R_ATHOqPdbGZTaTiGAALWIQACE0VhUxMjo495cEhYPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
