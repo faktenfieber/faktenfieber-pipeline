@@ -1228,11 +1228,13 @@
   "run_id": "42234560798",
   "dauer": 61.9,
   "stats": {
-   "likes": 0,
+   "likes": 1,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 13,
+   "yt_aufrufe": 0,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-06T17:59:15.620782+01:00"
+  "punkte": 4.7,
+  "stats_am": "2026-11-06T18:58:38.501002+01:00"
  }
 ]
