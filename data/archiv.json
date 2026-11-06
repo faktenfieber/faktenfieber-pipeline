@@ -1203,5 +1203,36 @@
   },
   "punkte": 10.1,
   "stats_am": "2026-11-06T17:41:31.973814+01:00"
+ },
+ {
+  "slot": "2026-11-06 18:00",
+  "gepostet": "2026-11-06T17:59:13.404629+01:00",
+  "titel": "Der stärkste Shuttle wurde zum Testmodell",
+  "thema": "Challenger (Raumfähre)",
+  "hook_stil": "Mythos-Check",
+  "stimme": "Charon",
+  "quelle": "serie",
+  "folge": 45,
+  "fan": null,
+  "frage": "Welchen Mythos soll ich als Nächstes entlarven?",
+  "catch": 9,
+  "faden": 4,
+  "serie": "Fail-Freitag",
+  "schwierigkeit": 6.3,
+  "modus": "fakt",
+  "text": "Der Challenger war zuerst nur ein Testmodell, nicht einsatzbereit. Er wurde nur für Bodentests gebaut. NASA wollte das Testfahrzeug Enterprise ins All umbauen. Das war aber zu teuer und zu langsam. Stattdessen wurde Challenger zur echten Raumfähre umgebaut. Er war etwa 1000 kg leichter als Columbia. Im April 1983 startete er als zweiter Orbiter. In drei Jahren flog er zehn Missionen. Damit war er über 62 Tage im All. Im Januar 1986 kam das Unglück beim Start. 73 Sekunden nach dem Abheben explodierte er. Ein Dichtungsring an der Rakete hielt dem Druck nicht stand. Die Rakete traf den Haupttank und zerbrach alles. Alle sieben Astronauten starben, darunter die erste Lehrerin im All. Deshalb gilt bis heute: Sicherheit zuerst.",
+  "stunde": "18",
+  "ig": "17991066321117657",
+  "yt": "9BiGohgneYI",
+  "ig_link": "https://www.instagram.com/reel/DfaFvmmkW8b/",
+  "run_id": "42234560798",
+  "dauer": 61.9,
+  "stats": {
+   "likes": 0,
+   "kommentare": 1,
+   "aufrufe": 0
+  },
+  "punkte": 3.0,
+  "stats_am": "2026-11-06T17:59:15.620782+01:00"
  }
 ]
