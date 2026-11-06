@@ -561,6 +561,21 @@
    },
    "ig_media_id": "18138404683629331",
    "gepostet_um": "2026-11-05T17:59:39.620425+01:00"
+  },
+  "2026-11-06 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42188199067",
+   "message_id": 397,
+   "titel": "Ungewöhnliche Gesetze in Österreich",
+   "thema": "Pornografiegesetz",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-06T09:37:39.142927+01:00",
+   "wunsch": "Ungewöhnliche Gesetze in Österreich",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBjGrtkdKkquL_cx-jC4YSncR-9WkZAAJSJwACkO9wU2cWNy45INJ6PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
