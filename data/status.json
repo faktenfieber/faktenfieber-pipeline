@@ -527,6 +527,21 @@
    },
    "ig_media_id": "18179794657443341",
    "gepostet_um": "2026-11-07T07:57:59.495112+01:00"
+  },
+  "2026-11-07 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42359955928",
+   "message_id": 409,
+   "titel": "Wie viel Wald geht im Amazonas verloren?",
+   "thema": "Amazonas-Regenwald",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-07T10:38:22.230746+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBmGru8Y1pBGp8x7o6vNTB8ZsnbIiUAALVIAACl9t4U7p8KkDd9TTTPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
