@@ -2046,6 +2046,42 @@ def szene_rendern(clip, dauer, ziel, nummer=0):
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", ziel)
 
 
+def bild_saeubern(quelle, ziel):
+    """Prueft ein heruntergeladenes Bild (manchmal kommt HTML, SVG, CMYK oder ein Riesenbild) und macht daraus
+    ein sauberes RGB-JPEG mit max. 3000 px. Wirft einen Fehler, wenn es gar kein Bild ist."""
+    from PIL import Image, ImageOps
+    Image.MAX_IMAGE_PIXELS = None
+    with Image.open(quelle) as im:
+        im = ImageOps.exif_transpose(im)
+        if im.mode in ("RGBA", "LA", "P"):
+            im = im.convert("RGBA")
+            hg = Image.new("RGB", im.size, (20, 20, 24))
+            hg.paste(im, mask=im.split()[-1])
+            im = hg
+        else:
+            im = im.convert("RGB")
+        if min(im.size) < 64:
+            raise ValueError("Bild zu klein")
+        im.thumbnail((3000, 3000))
+        im.save(ziel, "JPEG", quality=92)
+    return ziel
+
+
+def ersatz_bild(daten):
+    """Notfall: dunkler Verlauf, falls wirklich kein einziges Bild brauchbar ist."""
+    from PIL import Image
+    ziel = WORK / "ersatz.jpg"
+    if not ziel.exists():
+        im = Image.new("RGB", (1080, 1920))
+        px = im.load()
+        for y in range(1920):
+            c = int(18 + 30 * y / 1920)
+            for x in range(1080):
+                px[x, y] = (c, c // 2 + 8, c + 20)
+        im.save(ziel, "JPEG", quality=90)
+    return ziel
+
+
 def bild_rendern(bild, dauer, ziel, nummer):
     """Standbild -> bewegtes Segment: unscharfer Hintergrund + ganzes Bild im Vordergrund + langsamer Zoom."""
     komp = WORK / f"komp_{nummer:02d}.png"
@@ -2721,19 +2757,27 @@ def video_bauen(daten):
             visuals.append(visuals[-1])
         for j, (art, quelle) in enumerate(visuals[:teile]):
             seg = WORK / f"seg_{i:02d}_{j}.mp4"
-            if art == "bild":
-                if quelle not in bild_dateien:
-                    datei = WORK / f"bild_{quelle:02d}.jpg"
-                    if bilder[quelle].get("lokal"):
-                        datei = Path(bilder[quelle]["url"])
-                    else:
-                        datei.write_bytes(requests.get(bilder[quelle]["url"], headers=WIKI_HEADERS, timeout=120).content)
-                    bild_dateien[quelle] = datei
-                bild_rendern(bild_dateien[quelle], teil_dauer, seg, len(segmente))
-            else:
-                clip = WORK / f"clip_{i:02d}_{j}.mp4"
-                clip.write_bytes(requests.get(quelle, timeout=300).content)
-                szene_rendern(clip, teil_dauer, seg, len(segmente))
+            try:
+                if art == "bild":
+                    if quelle not in bild_dateien:
+                        datei = WORK / f"bild_{quelle:02d}.jpg"
+                        if bilder[quelle].get("lokal"):
+                            datei = Path(bilder[quelle]["url"])
+                        else:
+                            datei.write_bytes(requests.get(bilder[quelle]["url"], headers=WIKI_HEADERS, timeout=120).content)
+                        bild_dateien[quelle] = bild_saeubern(datei, WORK / f"bild_{quelle:02d}_ok.jpg")
+                    bild_rendern(bild_dateien[quelle], teil_dauer, seg, len(segmente))
+                else:
+                    clip = WORK / f"clip_{i:02d}_{j}.mp4"
+                    clip.write_bytes(requests.get(quelle, timeout=300).content)
+                    szene_rendern(clip, teil_dauer, seg, len(segmente))
+            except Exception as e:
+                # Kaputtes Bild/Clip darf nicht das ganze Video killen: Ersatzbild nehmen
+                log(f"Szene {i+1}: Material unbrauchbar ({type(e).__name__}) – nehme Ersatz")
+                if art == "bild":
+                    bild_dateien.pop(quelle, None)
+                ersatz = next((d for d in bild_dateien.values() if Path(d).exists()), None) or ersatz_bild(daten)
+                bild_rendern(ersatz, teil_dauer, seg, len(segmente))
             segmente.append(seg)
         arten = [a for a, _ in visuals[:teile]]
         log(f"Szene {i+1}/{len(szenen)}: {arten.count('bild')} echte(s) Bild(er), {arten.count('clip')} Clip(s)")
