@@ -525,6 +525,21 @@
    },
    "ig_media_id": "17991066321117657",
    "gepostet_um": "2026-11-06T17:59:13.403817+01:00"
+  },
+  "2026-11-07 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42338770015",
+   "message_id": 404,
+   "titel": "Nvidia knackt 5 Billionen‑Dollar‑Marke 2025",
+   "thema": "Nvidia",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-07T05:38:06.330644+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBk2ruqy0fNTNQ58qHj28HMYgmi-dUAAJDIAACkO94UxHmtUkSdo80PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
