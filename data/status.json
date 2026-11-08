@@ -489,6 +489,21 @@
    },
    "ig_media_id": "17993088455857909",
    "gepostet_um": "2026-11-08T07:57:42.521636+01:00"
+  },
+  "2026-11-08 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42463240923",
+   "message_id": 419,
+   "titel": "Warum das Web im Keller begann",
+   "thema": "World Wide Web",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-08T09:34:36.167310+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBomrwNBtojfSxWsixhNpcENZCCzPWAAJIIgACl9uAUwUyISuI8ZDVPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
