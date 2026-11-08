@@ -487,6 +487,21 @@
    },
    "ig_media_id": "18088557017705236",
    "gepostet_um": "2026-11-07T11:57:38.414601+01:00"
+  },
+  "2026-11-08 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42447105659",
+   "message_id": 416,
+   "titel": "USA schmuggeln 1600 Nazis heimlich",
+   "thema": "Operation Overcast",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-08T05:38:59.096033+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBn2rv_OLqev8FkQP_9qV4TndaRAXmAAL8IQACl9uAU883HZjG84UAAT0E",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
