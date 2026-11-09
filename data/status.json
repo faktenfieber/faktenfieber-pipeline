@@ -445,6 +445,21 @@
    },
    "ig_media_id": "18039135011653910",
    "gepostet_um": "2026-11-09T07:58:18.614102+01:00"
+  },
+  "2026-11-09 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42586473838",
+   "message_id": 433,
+   "titel": "Das größte Bauwerk der Erde ist lebendig",
+   "thema": "Great Barrier Reef",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-09T09:43:55.895921+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBsGrxh8sIIN76blJ4engb-XisEA3mAALIHwAC296QU3X9ydL_TJyNPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
