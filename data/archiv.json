@@ -1494,9 +1494,11 @@
   "stats": {
    "likes": 0,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 22,
+   "yt_aufrufe": 0,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-09T17:57:55.592471+01:00"
+  "punkte": 4.1,
+  "stats_am": "2026-11-09T19:01:03.142681+01:00"
  }
 ]
