@@ -468,6 +468,21 @@
    },
    "ig_media_id": "18197703931403218",
    "gepostet_um": "2026-11-08T17:57:47.385851+01:00"
+  },
+  "2026-11-09 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42562237889",
+   "message_id": 430,
+   "titel": "Leonardo behielt die Mona Lisa einfach",
+   "thema": "Mona Lisa",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-09T05:38:14.106528+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBrWrxTjXMo1wQYY0mNKsrk2nyX8bPAAKNHwAC296QU9Xqaiy_ziBIPQQ",
+   "modus": "raetsel"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
