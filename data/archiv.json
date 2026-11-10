@@ -1591,11 +1591,13 @@
   "run_id": "42834812741",
   "dauer": 48.2,
   "stats": {
-   "likes": 0,
+   "likes": 1,
    "kommentare": 1,
-   "aufrufe": 0
+   "aufrufe": 14,
+   "yt_aufrufe": 0,
+   "yt_likes": 0
   },
-  "punkte": 3.0,
-  "stats_am": "2026-11-10T17:57:55.750999+01:00"
+  "punkte": 4.7,
+  "stats_am": "2026-11-10T18:58:51.474085+01:00"
  }
 ]
