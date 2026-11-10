@@ -445,6 +445,21 @@
    },
    "ig_media_id": "18645934528058607",
    "gepostet_um": "2026-11-09T17:57:53.874317+01:00"
+  },
+  "2026-11-10 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42756320600",
+   "message_id": 439,
+   "titel": "Wie SpaceX 2018 das All neu definierte",
+   "thema": "SpaceX",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-10T05:34:27.012587+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBtmryntICi1X9R6Eo8Px6FWk46SoVAAIDIQAC296YU9VBgB0m3wcyPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
