@@ -422,6 +422,21 @@
    },
    "ig_media_id": "17977879547938536",
    "gepostet_um": "2026-11-10T11:57:50.938982+01:00"
+  },
+  "2026-11-10 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42834812741",
+   "message_id": 448,
+   "titel": "Dieser Dinosaurier lebt noch",
+   "thema": "Kryptozoologie",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-10T15:40:43.931845+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBv2rzLOuoVOUInV7FY872aDJIXz2bAAJtIAACcv-ZUzvhcLaNkCknPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
