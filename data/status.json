@@ -422,6 +422,21 @@
    },
    "ig_media_id": "18128854606841429",
    "gepostet_um": "2026-11-10T07:58:53.873395+01:00"
+  },
+  "2026-11-10 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42783211395",
+   "message_id": 445,
+   "titel": "72 Sekunden, die das All laut werden ließen",
+   "thema": "Wow!-Signal",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-10T09:40:04.732717+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBvGry2GSWxuHI1eu2xi4rC-9WLezdAAI3IQAC296YU97RhWgl777uPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
