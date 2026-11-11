@@ -422,6 +422,21 @@
    },
    "ig_media_id": "18157311166531284",
    "gepostet_um": "2026-11-10T17:57:53.943932+01:00"
+  },
+  "2026-11-11 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42959702977",
+   "message_id": 451,
+   "titel": "Denny’s‑Diner startet das KI‑Imperium",
+   "thema": "Jen-Hsun Huang",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-11T05:36:51.769030+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBwmrz8OP-r6TrQXU3QPsK49THviZAAALjIQACcv-hU3JglPtRkTQHPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
