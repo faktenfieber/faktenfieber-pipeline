@@ -399,6 +399,21 @@
    },
    "ig_media_id": "18220112806357303",
    "gepostet_um": "2026-11-11T07:59:00.630230+01:00"
+  },
+  "2026-11-11 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "42987611895",
+   "message_id": 455,
+   "titel": "Ein Garten am Rande des Grauens",
+   "thema": "The Zone of Interest (Film)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-11T09:35:59.400679+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBxmr0KO65utJLwoJraRkts7RbZSDkAAIUIgACcv-hUzFG9uLUuQdcPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
