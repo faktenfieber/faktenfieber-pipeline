@@ -378,6 +378,21 @@
    },
    "ig_media_id": "17913123759308883",
    "gepostet_um": "2026-11-12T11:58:23.797606+01:00"
+  },
+  "2026-11-12 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43237933892",
+   "message_id": 469,
+   "titel": "Ein Müllwagen Plastik versinkt im Ozean",
+   "thema": "Plastikmüll in den Ozeanen",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-12T15:36:45.160438+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB1Gr1zvyqFqp9a-ukSK2GGhp9nwFqAALWIQACPYywU5vl1nYEAVgnPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
