@@ -378,6 +378,21 @@
    },
    "ig_media_id": "18157531753522333",
    "gepostet_um": "2026-11-12T07:58:16.144493+01:00"
+  },
+  "2026-11-12 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43183539510",
+   "message_id": 465,
+   "titel": "Wie ein Känguru das Frühstück stiehlt",
+   "thema": "Die Känguru-Chroniken",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-12T09:39:45.507970+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB0Gr1e1Chjni0Y8tO3Awwlu0AAZq78gAC2CIAAj2MqFPTiyD8zBAEmD0E",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
