@@ -378,6 +378,21 @@
    },
    "ig_media_id": "18361136398172805",
    "gepostet_um": "2026-11-11T11:58:05.672329+01:00"
+  },
+  "2026-11-12 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43155273988",
+   "message_id": 460,
+   "titel": "Das 600‑jährige Rätselbuch, das keiner löst",
+   "thema": "Voynich-Manuskript",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-12T05:35:18.596414+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIBy2r1Qgbt1kdHA3yyNwnbWevR3P4PAAKzIgACPYyoU_fzqPdUfiYYPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
