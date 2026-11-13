@@ -378,6 +378,21 @@
    },
    "ig_media_id": "17979543177153452",
    "gepostet_um": "2026-11-12T17:57:52.987408+01:00"
+  },
+  "2026-11-13 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43365990681",
+   "message_id": 472,
+   "titel": "Wie ein Debüt‑Hit 2003 die Charts eroberte",
+   "thema": "Yvonne Catterfeld",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-13T05:35:17.262893+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB12r2k4SoAUtkI57FfNzIs0HsbHRkAAI5IwACPYywU2WCde5L5Q8fPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
