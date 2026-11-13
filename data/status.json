@@ -399,6 +399,21 @@
    },
    "ig_media_id": "18067482233625929",
    "gepostet_um": "2026-11-13T07:58:04.585732+01:00"
+  },
+  "2026-11-13 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43403362146",
+   "message_id": 480,
+   "titel": "Tödlicher Krimi im stillen Wald – Wolfsland",
+   "thema": "Wolfsland (Fernsehreihe)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-13T10:50:22.224043+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB32r23V3GeYGO4iVEd0HLmo7ftch3AALOHgACJUW4Uz8wSgZnrkkDPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
