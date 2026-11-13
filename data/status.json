@@ -399,6 +399,21 @@
    },
    "ig_media_id": "18453174523126999",
    "gepostet_um": "2026-11-13T11:58:22.085202+01:00"
+  },
+  "2026-11-13 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43453365414",
+   "message_id": 484,
+   "titel": "Fünf Kompanien in einer Nacht ausgelöscht",
+   "thema": "Schlacht am Little Bighorn",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-13T16:38:17.123201+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB42r3LuhIKSiQiGcLs_EJVEKjocFRAAJKHwACJUW4U5yzzPH16MiSPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
