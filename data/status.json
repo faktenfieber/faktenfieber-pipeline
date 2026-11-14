@@ -399,6 +399,21 @@
    },
    "ig_media_id": "18101582531544500",
    "gepostet_um": "2026-11-13T17:58:11.543374+01:00"
+  },
+  "2026-11-14 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43557008670",
+   "message_id": 488,
+   "titel": "2000 Eier pro Tag – das Geheimnis der Königin",
+   "thema": "Bienenkönigin",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-14T05:34:46.775908+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB52r35Oa0sM20NK6j-G_ke6tu5ukJAAJ_IAACJUXAU-a9AYWysYW2PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
