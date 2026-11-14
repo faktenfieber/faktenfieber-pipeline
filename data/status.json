@@ -399,6 +399,21 @@
    },
    "ig_media_id": "18416752201090443",
    "gepostet_um": "2026-11-14T07:57:47.426186+01:00"
+  },
+  "2026-11-14 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43576164453",
+   "message_id": 494,
+   "titel": "Dieses Fell hält Luft fest",
+   "thema": "Fischotter",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-14T09:38:36.061258+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB7Wr4HguVlLXkB9T-JimCxH-mckzTAAKfIAACJUXAU3kQso4NesIjPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
