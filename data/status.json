@@ -420,6 +420,21 @@
    },
    "ig_media_id": "17916812727498956",
    "gepostet_um": "2026-11-15T07:57:51.532019+01:00"
+  },
+  "2026-11-15 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43699563706",
+   "message_id": 507,
+   "titel": "200 km/h durch die Nacht – Post per Zug",
+   "thema": "Post InterCity",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-15T10:35:34.640029+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB-mr5fOUHQ0RB9467M-nvBw2CWtktAAJrIgAC7mDQUwABgjcSpiZANz0E",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
