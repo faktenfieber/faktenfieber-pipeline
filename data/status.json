@@ -420,6 +420,21 @@
    },
    "ig_media_id": "18105970862029389",
    "gepostet_um": "2026-11-14T17:57:46.900934+01:00"
+  },
+  "2026-11-15 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43677081290",
+   "message_id": 502,
+   "titel": "Fußball-Schiedsrichter wird Löwen-Investor",
+   "thema": "Ralf Dümmel",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-15T05:37:50.285243+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIB9Wr5Nx07ItlyZMeTvWqrUFcmHytJAAKbIwAC7mDIUya9DCWTCfKmPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
