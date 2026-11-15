@@ -442,6 +442,21 @@
    },
    "ig_media_id": "18127308461304824",
    "gepostet_um": "2026-11-15T13:07:15.461945+01:00"
+  },
+  "2026-11-15 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43724744795",
+   "message_id": 514,
+   "titel": "Wie ein Magnet dein Schuh schließt",
+   "thema": "Klettverschluss",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-15T15:35:06.194771+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICAWr5wxktNToThiFlJT4-FqrY-GQfAAL6IgAC7mDQU83imummY53ZPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
