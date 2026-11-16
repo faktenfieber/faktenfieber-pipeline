@@ -442,6 +442,21 @@
    },
    "ig_media_id": "18116709620023638",
    "gepostet_um": "2026-11-15T17:58:16.026719+01:00"
+  },
+  "2026-11-16 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "43804546874",
+   "message_id": 520,
+   "titel": "Das rätselhafte Verschwinden von Roanoke",
+   "thema": "Roanoke (Kolonie)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-16T05:35:23.787908+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICB2r6iAuwrmrm_C7BDQxtkvoIN7TQAAJXHwAC7mDYUyV5yQnHmDwBPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
