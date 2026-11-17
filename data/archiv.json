@@ -2218,5 +2218,36 @@
   },
   "punkte": 5.2,
   "stats_am": "2026-11-17T11:41:31.872933+01:00"
+ },
+ {
+  "slot": "2026-11-17 12:00",
+  "gepostet": "2026-11-17T11:58:37.765796+01:00",
+  "titel": "Warum das All uns schweigt",
+  "thema": "Fermi-Paradoxon",
+  "hook_stil": "Frage",
+  "stimme": "Charon",
+  "quelle": "ideen",
+  "folge": 76,
+  "fan": null,
+  "frage": "Welches mögliche Erklärungsmodell findest du am überzeugendsten?",
+  "catch": 9,
+  "faden": 6,
+  "serie": null,
+  "schwierigkeit": 6.9,
+  "modus": "fakt",
+  "text": "Die Milchstraße ist 100 000 Lichtjahre breit. Wir sehen keinen Besucher. Enrico Fermi stellte 1950 beim Mittagessen in Los Alamos die Frage. Er fragte: „Where is everybody?“, weil er an Besiedlung dachte. Die Milchstraße enthält Milliarden Sterne, die leuchten. Bei 1 % Lichtgeschwindigkeit braucht ein Schiff zehn Millionen Jahre. Die Galaxie ist über 10 Milliarden Jahre alt. Eine sehr entwickelte Gruppe müsste klare Spuren hinterlassen. Bisher gibt es keinen Beweis für außerirdische Gruppen. Vielleicht sind Reisen zwischen Sternen physikalisch unmöglich. Oder Leben ist sehr selten – die Rare‑Earth‑Hypothese. Viele Sterne, kein Signal – das ist das Fermi‑Paradoxon. Darum bleibt das Universum für uns still.",
+  "stunde": "12",
+  "ig": "17979194259139455",
+  "yt": "eYyaXWniWFU",
+  "ig_link": "https://www.instagram.com/reel/Df1xNknCi8d/",
+  "run_id": "44047354072",
+  "dauer": 58.7,
+  "stats": {
+   "likes": 0,
+   "kommentare": 1,
+   "aufrufe": 0
+  },
+  "punkte": 3.0,
+  "stats_am": "2026-11-17T11:59:20.047215+01:00"
  }
 ]
