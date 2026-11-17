@@ -442,6 +442,21 @@
    },
    "ig_media_id": "18112232525237174",
    "gepostet_um": "2026-11-16T17:58:02.194897+01:00"
+  },
+  "2026-11-17 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44017680268",
+   "message_id": 531,
+   "titel": "125 Millionen sprangen 2017 aus einem Bus",
+   "thema": "Fortnite",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-17T05:40:18.004664+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICEmr72rEhKKtmZYRiOyln68yR4BFiAAIYIgAC9-fgU1bHT6m7NCVBPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
