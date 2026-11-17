@@ -442,6 +442,21 @@
    },
    "ig_media_id": "18055494002604259",
    "gepostet_um": "2026-11-17T07:57:55.040093+01:00"
+  },
+  "2026-11-17 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44047354072",
+   "message_id": 537,
+   "titel": "Warum das All uns schweigt",
+   "thema": "Fermi-Paradoxon",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-17T09:36:16.285345+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICGGr8Ef_1aUUTUC5ZCT2mblM4Uu6OAAI7IgAC9-fgU7K4lSF2NxmhPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-10-28T17:06:18.281076+01:00",
