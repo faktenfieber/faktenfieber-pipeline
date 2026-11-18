@@ -442,6 +442,21 @@
    },
    "ig_media_id": "17953379808054923",
    "gepostet_um": "2026-11-17T17:58:39.972833+01:00"
+  },
+  "2026-11-18 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44237823813",
+   "message_id": 545,
+   "titel": "Der wahre Ursprung von 007",
+   "thema": "James Bond",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-18T05:48:22.249276+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICIGr9LhUsGc4KOt3WEjOcEGirl1xqAAJdHQAC-xDwU6cu2CAMzUtdPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
