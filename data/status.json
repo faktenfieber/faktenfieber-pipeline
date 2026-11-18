@@ -442,6 +442,21 @@
    },
    "ig_media_id": "17991239942878460",
    "gepostet_um": "2026-11-18T07:58:35.321371+01:00"
+  },
+  "2026-11-18 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44267616839",
+   "message_id": 550,
+   "titel": "Der blutige Leopard, der 125 Menschen tötete",
+   "thema": "Leopard von Rudraprayag",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-18T09:37:01.214088+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICJWr9Y6uozndAHM1wpuHHpv-P_r_EAAKeHQAC-xDwUyMuqKrRCkhJPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
