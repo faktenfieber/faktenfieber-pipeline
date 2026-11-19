@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-19T11:57:16.785757+01:00"
+  },
+  "2026-11-19 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44544532650",
+   "message_id": 572,
+   "titel": "Karte zeigt Land das 1513 unmöglich war",
+   "thema": "Karte des Piri Reis",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-19T15:34:35.994514+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICO2r_CPsef0jo-P82f2NwRq_oU_-IAAKqIgACfVv4UyshP1atgOsZPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
