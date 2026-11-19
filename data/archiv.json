@@ -2471,5 +2471,30 @@
   "run_id": "44488219563",
   "dauer": 56.6,
   "stats": {}
+ },
+ {
+  "slot": "2026-11-19 18:00",
+  "gepostet": "2026-11-19T17:57:08.799038+01:00",
+  "titel": "Karte zeigt Land das 1513 unmöglich war",
+  "thema": "Karte des Piri Reis",
+  "hook_stil": "Widerspruch",
+  "stimme": "Charon",
+  "quelle": "ideen",
+  "folge": 84,
+  "fan": null,
+  "frage": "Welcheshistorisches Geheimnis soll als Nächstes gelöst werden?",
+  "catch": 9,
+  "faden": 5,
+  "serie": null,
+  "schwierigkeit": 5.6,
+  "modus": "fakt",
+  "text": "Diese Karte zeigt Land, das 1513 unmöglich war. Sie stammt vom osmanischen Admiral Piri Reis. Sie lag 416 Jahre lang im Topkapi-Palast. Erst 1929 fand man sie bei einer Inventur. Das Problem: Sie zeigte Südamerika richtig positioniert. Doch die eigentliche Quelle war noch krasser. Piri baute sie aus zwanzig alten Karten. Eine stammte von einem Spanier aus Kolumbus' Crew. Dessen Karte war bis dahin komplett verloren. Deshalb ist sie heute UNESCO Weltkulturerbe. Und genau deshalb ist sie heute Weltkulturerbe:",
+  "stunde": "18",
+  "ig": null,
+  "yt": "pxYhrrWJQcQ",
+  "ig_link": null,
+  "run_id": "44544532650",
+  "dauer": 49.2,
+  "stats": {}
  }
 ]
