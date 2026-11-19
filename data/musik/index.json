@@ -1,11 +1,4 @@
 {
- "2c4c8ea532ad4f98bcb47a97b79ae5.mp3": {
-  "nachweis": "„ambient rezonator“ von YA-ZZEE – CC BY-SA 3.0 – https://www.jamendo.com/track/298871",
-  "stimmung": "mystisch",
-  "tags": "dreamy, instrumental, speed_medium",
-  "ohne_stimme": true,
-  "ruhig_geprueft": true
- },
  "3751d808df374f8db71b3c7f71fb24.mp3": {
   "nachweis": "„solitude“ von Benjamin Lambert – CC BY-SA 3.0 – https://www.jamendo.com/track/1105385",
   "stimmung": "mystisch",
@@ -171,6 +164,13 @@
   "nachweis": "„Run away“ von Paolo Lazzarini – CC BY-SA 3.0 – https://www.jamendo.com/track/1572833",
   "stimmung": "mystisch",
   "tags": "piano, atmospheric, peaceful, romantic",
+  "ohne_stimme": true,
+  "ruhig_geprueft": true
+ },
+ "52bfd0832c4740b6a7d80af91f50b7.mp3": {
+  "nachweis": "„Sunrise over the misty mountains“ von zero-project – CC BY 3.0 – https://www.jamendo.com/track/682358",
+  "stimmung": "sanft",
+  "tags": "instrumental, neutral, orchestra, peaceful, piano, speed_medium",
   "ohne_stimme": true,
   "ruhig_geprueft": true
  }

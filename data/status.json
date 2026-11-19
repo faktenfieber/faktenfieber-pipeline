@@ -463,6 +463,21 @@
    },
    "ig_media_id": "17961145248261362",
    "gepostet_um": "2026-11-18T17:58:13.576100+01:00"
+  },
+  "2026-11-19 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44458821510",
+   "message_id": 559,
+   "titel": "Pinguin, 16 kg – das ist ein Hund!",
+   "thema": "Königspinguin",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-19T05:41:45.818272+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICLmr-fglrXuq8iChILkY8tOHhfQPvAAL8HQAC-xD4U_5FwosQBDlOPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
