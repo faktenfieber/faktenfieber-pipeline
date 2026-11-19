@@ -2445,7 +2445,12 @@
   "ig_link": null,
   "run_id": "44458821510",
   "dauer": 35.4,
-  "stats": {}
+  "stats": {
+   "yt_aufrufe": 0,
+   "yt_likes": 0
+  },
+  "punkte": 0.0,
+  "stats_am": "2026-11-19T18:11:04.135374+01:00"
  },
  {
   "slot": "2026-11-19 12:00",
@@ -2470,7 +2475,12 @@
   "ig_link": null,
   "run_id": "44488219563",
   "dauer": 56.6,
-  "stats": {}
+  "stats": {
+   "yt_aufrufe": 0,
+   "yt_likes": 0
+  },
+  "punkte": 0.0,
+  "stats_am": "2026-11-19T18:11:04.135383+01:00"
  },
  {
   "slot": "2026-11-19 18:00",
@@ -2495,6 +2505,11 @@
   "ig_link": null,
   "run_id": "44544532650",
   "dauer": 49.2,
-  "stats": {}
+  "stats": {
+   "yt_aufrufe": 0,
+   "yt_likes": 0
+  },
+  "punkte": 0.0,
+  "stats_am": "2026-11-19T18:11:04.135385+01:00"
  }
 ]
