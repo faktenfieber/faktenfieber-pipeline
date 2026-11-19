@@ -478,6 +478,21 @@
    "verworfen": [],
    "tg_file": "BAACAgQAAxkDAAICLmr-fglrXuq8iChILkY8tOHhfQPvAAL8HQAC-xD4U_5FwosQBDlOPQQ",
    "modus": "fakt"
+  },
+  "2026-11-19 07:14": {
+   "status": "wartet",
+   "auto": false,
+   "run_id": "44470603389",
+   "message_id": 563,
+   "titel": "GTA VI – Das teuerste Spiel aller Zeiten",
+   "thema": "Grand Theft Auto VI",
+   "extra": true,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-19T07:19:34.354604+01:00",
+   "wunsch": "Grand Theft Auto VI",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICMmr-lPWu2ExZ1Pcr4-CeGrDPfzmNAAINHgAC-xD4U1IXx8-dB7a0PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
