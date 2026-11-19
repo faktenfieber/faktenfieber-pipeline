@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-19T07:21:35.301623+01:00"
+  },
+  "2026-11-19 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44488219563",
+   "message_id": 569,
+   "titel": "Das erste Google‑Easter‑Egg 1998",
+   "thema": "Google Doodle",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-19T09:40:35.553381+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICOGr-tgIHjAY_6XumX3Fm0O828P79AAI3HgAC-xD4U57Hqo-XXsq5PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
