@@ -2536,5 +2536,30 @@
   "run_id": "44674888723",
   "dauer": 63.1,
   "stats": {}
+ },
+ {
+  "slot": "2026-11-20 12:00",
+  "gepostet": "2026-11-20T11:57:10.590990+01:00",
+  "titel": "16 Boote für 2 Mio Passagiere",
+  "thema": "Lusitania (Schiff, 1907)",
+  "hook_stil": "Widerspruch",
+  "stimme": "Charon",
+  "quelle": "serie",
+  "folge": 86,
+  "fan": null,
+  "frage": "Wie viele Boote hätte es brauchen?",
+  "catch": 9,
+  "faden": 4,
+  "serie": "Fail-Freitag",
+  "schwierigkeit": 4.5,
+  "modus": "fakt",
+  "text": "Dieses Schiff galt als unsinkbar. Warum? Es war 1907 das größte der Welt. Tausende Passagiere passten theoretisch rein. Aber nur 16 Rettungsboote gab es. Das reichte für 960 Menschen. Warum so wenige? Die Gesetze waren alt. Die kamen nämlich von 1897. 1915 wurde es vor Irland getroffen. Ein U-Boot feuerte einen Torpedo ab. Nach 18 Minuten sank es. 1198 Menschen starben in der Kälte. Die Presse nannte es unsinkbar. Doch die Schotten hatten 69 Türen. 34 davon mussten von Hand geschlossen werden. Zeit fehlte. Und Boote auch.",
+  "stunde": "12",
+  "ig": null,
+  "yt": "8X7eGAc3Usc",
+  "ig_link": null,
+  "run_id": "44703119941",
+  "dauer": 52.9,
+  "stats": {}
  }
 ]
