@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-20T11:57:10.590290+01:00"
+  },
+  "2026-11-20 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44754147727",
+   "message_id": 584,
+   "titel": "Spritze vor 15.000 Zuschauern",
+   "thema": "Alexander Zverev",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-20T15:42:23.172891+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICR2sAAVxO6l2dtgXJDqz1XXPnno_YNQACsB4AAn1bCFDZF8pCnyJIMz0E",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
