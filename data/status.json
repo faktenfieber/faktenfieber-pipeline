@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-20T07:57:12.239982+01:00"
+  },
+  "2026-11-20 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44703119941",
+   "message_id": 580,
+   "titel": "16 Boote für 2 Mio Passagiere",
+   "thema": "Lusitania (Schiff, 1907)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-20T09:35:03.911559+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICQ2sAAQY3n0rOCbQZ0aOMh0dHR9yfgwAC2SAAAn1bAAFQBeK2LOBqs3Y9BA",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
