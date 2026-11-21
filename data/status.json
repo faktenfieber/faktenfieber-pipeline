@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-21T07:56:53.253696+01:00"
+  },
+  "2026-11-21 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44885223063",
+   "message_id": 592,
+   "titel": "Geheime Saat im ewigen Eis",
+   "thema": "Svalbard Global Seed Vault",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-21T09:34:45.092719+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICT2sBV6RJn83c4nF6_VOPMNEG55Y5AAJUIwACjyQJUO4c5R4yeX34PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
