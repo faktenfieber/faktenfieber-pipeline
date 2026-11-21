@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-21T11:56:55.639747+01:00"
+  },
+  "2026-11-21 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44914300459",
+   "message_id": 595,
+   "titel": "20‑Meter‑Breiter Graben um die Donauturm‑Burg",
+   "thema": "Burg Wildenstein (Leibertingen)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-21T15:35:51.035183+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICUmsBrEbYcPa8n4_F0fJ4CFbOH6-tAAIvJAACjyQRUI6eap7A6xqRPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
