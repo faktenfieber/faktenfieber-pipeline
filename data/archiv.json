@@ -2626,5 +2626,30 @@
   "run_id": "44866461646",
   "dauer": 67.6,
   "stats": {}
+ },
+ {
+  "slot": "2026-11-21 12:00",
+  "gepostet": "2026-11-21T11:56:55.640432+01:00",
+  "titel": "Geheime Saat im ewigen Eis",
+  "thema": "Svalbard Global Seed Vault",
+  "hook_stil": "Schock-Fakt",
+  "stimme": "Charon",
+  "quelle": "ideen",
+  "folge": 89,
+  "fan": null,
+  "frage": "Welches Lebensmittel würdest du dort für die Nachwelt sichern?",
+  "catch": 9,
+  "faden": 6,
+  "serie": null,
+  "schwierigkeit": 6.3,
+  "modus": "fakt",
+  "text": "Tief im arktischen Eis liegt ein globaler Saatgut‑Bunker. Er wurde 2006 in einem stillgelegten Kohlebergwerk gebaut. Am 26. Februar 2008 öffnete man die dicken Stahltüren. Norwegen zahlte etwa 45 Millionen Kronen für den Bau. Innen ist es konstant –18 °C kalt. So kann das Saatgut bis zu zehntausend Jahre überleben. Bis Juni 2025 waren über 1,35 Millionen Proben dort. Das entspricht etwa 2,25 Milliarden einzelnen Samen. Jedes Land kann kostenlos seine Sorten dort sichern. Ein Atomkrieg oder ein Flugzeugcrash würde es nicht zerstören. Der Permafrost kühlt weiter, wenn der Strom ausfällt. Hier ruht das Leben für die Zukunft.",
+  "stunde": "12",
+  "ig": null,
+  "yt": "8Uc-q7ZFZa4",
+  "ig_link": null,
+  "run_id": "44885223063",
+  "dauer": 53.9,
+  "stats": {}
  }
 ]
