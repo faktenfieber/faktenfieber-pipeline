@@ -2,12 +2,6 @@
  {
   "tag": "2026-11-01",
   "art": "hit",
-  "titel": "2,5 Mrd. Dollar für Wurzeln und Steine",
-  "lektion": "Starke Titel‑Widersprüche + Trend‑Thema zur Hauptsendezeit"
- },
- {
-  "tag": "2026-11-01",
-  "art": "hit",
   "titel": "20 Boote, aber das Schiff sank trotzdem",
   "lektion": "Unerwartete Fakten + bekannte Themen + klarer Einstieg = höhere Klickrate"
  },
@@ -178,5 +172,11 @@
   "art": "flop",
   "titel": "Das erste Google‑Easter‑Egg 1998",
   "lektion": "Wähle eingängige Titel, breitere Themen und ungewöhnliche Upload‑Zeitpunkte."
+ },
+ {
+  "tag": "2026-11-21",
+  "art": "flop",
+  "titel": "Der Tag, an dem Claude 2 die KI‑Welt sprengte",
+  "lektion": "Trendthema, klaren Titel, passende Einstieg‑Zeit kombinieren"
  }
 ]
