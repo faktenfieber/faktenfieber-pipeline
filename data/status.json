@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-20T17:56:54.168491+01:00"
+  },
+  "2026-11-21 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44866461646",
+   "message_id": 587,
+   "titel": "Riemann’s line – 1 Million Dollar Challenge",
+   "thema": "Riemannsche Vermutung",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-21T05:34:17.211900+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICSmsBH0h8AUR0lqCxYTO0c5qVdnSMAAIbIwACjyQJUIxP5FEowS82PQQ",
+   "modus": "raetsel"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
