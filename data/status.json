@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-22T07:56:53.916365+01:00"
+  },
+  "2026-11-22 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45003145658",
+   "message_id": 602,
+   "titel": "Dieser Film wurde fast verboten",
+   "thema": "Pearl Harbor (Film)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-22T09:41:20.378749+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICWWsCqq93vmW82HGXKLm1ZIiV57jPAAIwIAACjyQZUJSjEPrRKL96PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
