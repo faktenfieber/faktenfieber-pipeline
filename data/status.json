@@ -486,6 +486,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-21T17:57:00.695900+01:00"
+  },
+  "2026-11-22 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "44985370120",
+   "message_id": 598,
+   "titel": "Doppelte Tribute im 50. Hungerspiel",
+   "thema": "Die Tribute von Panem – Sunrise on the Reaping",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-22T05:38:31.469913+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICVWsCccZdM2K1CRTvcaZqf1ENtpFvAALnHwACjyQZUF6Tb482NL8pPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
