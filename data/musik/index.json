@@ -1,11 +1,4 @@
 {
- "418d9ef72bf44f5790c0c278191935.mp3": {
-  "nachweis": "„Andante im klassischen Stil“ von Arnold Wohler – CC BY-SA 3.0 – https://www.jamendo.com/track/1659166",
-  "stimmung": "mystisch",
-  "tags": "atmospheric, instrumental, piano, speed_medium",
-  "ohne_stimme": true,
-  "ruhig_geprueft": true
- },
  "666979c2da7a470c8a45e4baa1cece.mp3": {
   "nachweis": "„Autumn prelude“ von zero-project – CC BY 3.0 – https://www.jamendo.com/track/633201",
   "stimmung": "mystisch",
@@ -171,6 +164,13 @@
   "nachweis": "„The age of the Unicorn“ von zero-project – CC BY 3.0 – https://www.jamendo.com/track/682362",
   "stimmung": "mystisch",
   "tags": "atmospheric, instrumental, neutral, piano, speed_medium, strings",
+  "ohne_stimme": true,
+  "ruhig_geprueft": true
+ },
+ "3751d808df374f8db71b3c7f71fb24.mp3": {
+  "nachweis": "„solitude“ von Benjamin Lambert – CC BY-SA 3.0 – https://www.jamendo.com/track/1105385",
+  "stimmung": "mystisch",
+  "tags": "instrumental, melancholic, peaceful, piano, speed_verylow, violin",
   "ohne_stimme": true,
   "ruhig_geprueft": true
  }
