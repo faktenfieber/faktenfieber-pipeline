@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-22T17:56:58.689557+01:00"
+  },
+  "2026-11-23 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45112288976",
+   "message_id": 615,
+   "titel": "Blutiger Vampir der Nacht",
+   "thema": "Chupacabra",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-23T05:34:40.052413+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICZmsDwl8XT6vf7i0AAbCQtmrQM9h6aAACsyAAAn5lIVAa0-aqEg3ZMj0E",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
