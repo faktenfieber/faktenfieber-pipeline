@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-23T11:56:57.626475+01:00"
+  },
+  "2026-11-23 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45194989563",
+   "message_id": 625,
+   "titel": "Wie Stonehenge die Cheops‑Pyramide übertrifft",
+   "thema": "Stonehenge",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-23T15:36:50.818723+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICcGsET4LOdP7W9AigCH3ErYbTdiJBAAJTIQACfmUhUEpRSvwE06C5PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
