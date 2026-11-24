@@ -2906,5 +2906,30 @@
   "run_id": "45356755079",
   "dauer": 53.9,
   "stats": {}
+ },
+ {
+  "slot": "2026-11-24 18:00",
+  "gepostet": "2026-11-24T17:57:01.466154+01:00",
+  "titel": "21 Meter, 1,5 Mio. km?",
+  "thema": "James-Webb-Weltraumteleskop",
+  "hook_stil": "Mythos-Check",
+  "stimme": "Charon",
+  "quelle": "ideen",
+  "folge": 99,
+  "fan": null,
+  "frage": "Was ist dein Lieblingsteleskop?",
+  "catch": 9,
+  "faden": 5,
+  "serie": null,
+  "schwierigkeit": 5.2,
+  "modus": "fakt",
+  "text": "Nur 21 Meter, aber 1,5 Millionen Kilometer entfernt? Das James-Webb-Teleskop ist nur 21 Meter lang. Es fliegt seit 2021 im All. Gestartet wurde es mit der Ariane 5. Sein Ziel: Ein Punkt 1,5 Millionen Kilometer weg. Doch der wahre Wunder ist der Spiegel. Er besteht aus achtzehn goldbeschichteten Beryllium-Platten. Zusammen messen sie 6,5 Meter Durchmesser. Das ist 2,7 Mal größer als Hubble. Aber es sieht nicht schärfer. Weil es Infrarotlicht mit langen Wellen nutzt. Lange Wellen brauchen mehr Fläche für Details. Deshalb muss es unter 50 Kelvin bleiben. Fünf Schichten halten Sonne und Erde fern. Der Abstand zum Lagrange‑Punkt L2 dient der Stabilität der Umlaufbahn und der Minimierung von Sonnenlicht.",
+  "stunde": "18",
+  "ig": null,
+  "yt": "pSIy5GUaRsI",
+  "ig_link": null,
+  "run_id": "45414904321",
+  "dauer": 57.3,
+  "stats": {}
  }
 ]
