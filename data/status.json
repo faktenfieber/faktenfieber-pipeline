@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-23T17:57:19.484857+01:00"
+  },
+  "2026-11-24 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45326899718",
+   "message_id": 628,
+   "titel": "Größer als ein Fußballfeld",
+   "thema": "Höhle von Lascaux",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-24T05:35:18.282505+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICc2sFFAW8n3etd75tF2I4u93zlqJGAAL9IgACT6YoUCwT-7nofEDbPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
