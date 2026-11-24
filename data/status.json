@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-24T11:57:03.898139+01:00"
+  },
+  "2026-11-24 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45414904321",
+   "message_id": 636,
+   "titel": "21 Meter, 1,5 Mio. km?",
+   "thema": "James-Webb-Weltraumteleskop",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-24T15:35:15.807798+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICe2sFoKMsfl7M4Nw8LfuMeF-U-w0qAAK4JAACT6YwUOtYh4fgMBbCPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
