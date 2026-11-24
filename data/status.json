@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-24T07:57:11.501517+01:00"
+  },
+  "2026-11-24 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45356755079",
+   "message_id": 633,
+   "titel": "Die geheime Macht von Pokémon Go",
+   "thema": "Pokémon Go",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-24T09:34:08.682580+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICeGsFTAABjDE_CapwY1WTIGDNS6lVfQACNyMAAk-mKFAOMZ0YjnKNCj0E",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
