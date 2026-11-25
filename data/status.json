@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-25T11:57:10.129931+01:00"
+  },
+  "2026-11-25 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45634848738",
+   "message_id": 650,
+   "titel": "Geheimnisse der höchsten Klippen Britanniens",
+   "thema": "St. Kilda (Schottland)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-25T15:34:24.074992+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICiWsG8e-RbUw6-UnFv0XdiRlV8Ik3AALgIgACNx85UKAeM0brAaxpPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
