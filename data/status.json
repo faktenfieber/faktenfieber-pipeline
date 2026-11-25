@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-24T17:57:01.465329+01:00"
+  },
+  "2026-11-25 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45547276755",
+   "message_id": 639,
+   "titel": "Wie ein geheimes Netzwerk 4 Mrd $ wert wurde",
+   "thema": "Clubhouse (App)",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-25T05:36:07.877920+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICfmsGZbf7JFpNyiy1tFDqPco-6xIhAAJRHgACT6Y4UEn54bfa7bbbPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
