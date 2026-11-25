@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-25T07:56:58.533330+01:00"
+  },
+  "2026-11-25 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45576917510",
+   "message_id": 642,
+   "titel": "Der Pilot, der die Band tötete",
+   "thema": "Crossair-Flug 3597",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-25T09:35:04.034643+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICgWsGnbcNiGHZJ2uVPHQ5TaTrrW2CAAK3HgACT6Y4UJOdLU73Zi-5PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
