@@ -2810,7 +2810,7 @@
    "yt_likes": 0
   },
   "punkte": 0.0,
-  "stats_am": "2026-11-25T10:41:34.394345+01:00"
+  "stats_am": "2026-11-25T11:57:12.291345+01:00"
  },
  {
   "slot": "2026-11-23 12:00",
@@ -2991,5 +2991,30 @@
   },
   "punkte": 0.0,
   "stats_am": "2026-11-25T11:41:27.091542+01:00"
+ },
+ {
+  "slot": "2026-11-25 12:00",
+  "gepostet": "2026-11-25T11:57:10.130598+01:00",
+  "titel": "Der Pilot, der die Band tötete",
+  "thema": "Crossair-Flug 3597",
+  "hook_stil": "Widerspruch",
+  "stimme": "Charon",
+  "quelle": "trend",
+  "folge": 101,
+  "fan": null,
+  "frage": "Warum ist so ein Fehler möglich?",
+  "catch": 9,
+  "faden": 6,
+  "serie": null,
+  "schwierigkeit": 6.9,
+  "modus": "fakt",
+  "text": "Die Eurodance-Band verunglückte nicht wegen eines alten Piloten, sondern aufgrund eines Navigationsproblems. Es war kein Zufall, sondern ein Navigationsproblem. 24. November 2001, um 22:07 CET in der Schweiz. Eine Avro RJ100 flog von Berlin nach Zürich. Draußen herrschte dichter Nebel, die Sicht war schlecht. Der Kapitän flog tiefer als die sichere Mindesthöhe. Ein Navigationsfehler hatte das Flugzeug abgelenkt. Vier Kilometer vor der Landebahn traf der Jet den Boden. Die Maschine brach auseinander und fing Feuer. Von 33 Menschen an Bord überlebten nur neun. Die Crew bestand aus einem 57-jährigen Experten. Und einem 25-jährigen Azubi an seiner Seite. Der alte Pilot hatte bereits Prüflücken und Probleme. So endete der letzte Gig:",
+  "stunde": "12",
+  "ig": null,
+  "yt": "AedklTw8Wck",
+  "ig_link": null,
+  "run_id": "45576917510",
+  "dauer": 60.7,
+  "stats": {}
  }
 ]

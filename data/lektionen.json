@@ -2,12 +2,6 @@
  {
   "tag": "2026-11-05",
   "art": "flop",
-  "titel": "Der Film Die purpurnen Flüsse",
-  "lektion": "Klare, suchoptimierte Titel und passende Einstiegsstil zur Uhrzeit wählen"
- },
- {
-  "tag": "2026-11-05",
-  "art": "flop",
   "titel": "Das Rätsel des Dyatlov‑Passes",
   "lektion": "Klaren, einzigartigen Titel + starker Hook + optimale Upload‑Zeit wählen"
  },
@@ -178,5 +172,11 @@
   "art": "flop",
   "titel": "Größer als ein Fußballfeld",
   "lektion": "Starke, spezifische Titel, packender Einstieg, optimale Upload‑Zeit wählen."
+ },
+ {
+  "tag": "2026-11-25",
+  "art": "flop",
+  "titel": "Die geheime Macht von Pokémon Go",
+  "lektion": "Vermeide Clickbait‑Titel und nutze passende Einstiege für Faktenvideos."
  }
 ]
