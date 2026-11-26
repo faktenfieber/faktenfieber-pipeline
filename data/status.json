@@ -464,6 +464,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-25T17:56:54.814376+01:00"
+  },
+  "2026-11-26 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45755666414",
+   "message_id": 655,
+   "titel": "Das rätselhafte Epos, das Nationen formte",
+   "thema": "Nibelungenlied",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-26T05:35:34.112196+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICjmsHtxXZH9f2-b1aRb6t0aazUW0mAALwIwACNx85UAypxfm3sLnCPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
