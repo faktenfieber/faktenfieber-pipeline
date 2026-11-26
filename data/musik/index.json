@@ -1,11 +1,4 @@
 {
- "41b486cbc122412cb8aac05145ab5b.mp3": {
-  "nachweis": "„Millennium sunset“ von zero-project – CC BY 3.0 – https://www.jamendo.com/track/373287",
-  "stimmung": "mystisch",
-  "tags": "atmospheric, electricpiano, instrumental, neutral, peaceful, piano",
-  "ohne_stimme": true,
-  "ruhig_geprueft": true
- },
  "cd2d2688fd4c4104b3536073a08f70.mp3": {
   "nachweis": "„DreamDance 30 [ambient]“ von Hardcore Scm – CC BY 3.0 – https://www.jamendo.com/track/1196389",
   "stimmung": "sanft",
@@ -171,6 +164,13 @@
   "nachweis": "„Event Horizon Mystery“ von KonstantinPazuzuStudio – CC BY 3.0 – https://www.jamendo.com/track/2326417",
   "stimmung": "mystisch",
   "tags": "energetic, instrumental, meditative, soft, speed_verylow, synthesizer",
+  "ohne_stimme": true,
+  "ruhig_geprueft": true
+ },
+ "33991fa8223044949b6c8b595010da.mp3": {
+  "nachweis": "„Wellness Oase - Leon Ard“ von Mazelo Nostra – CC BY-SA 3.0 – https://www.jamendo.com/track/1739321",
+  "stimmung": "sanft",
+  "tags": "instrumental, peaceful, piano, soft, speed_verylow, synthesizer",
   "ohne_stimme": true,
   "ruhig_geprueft": true
  }
