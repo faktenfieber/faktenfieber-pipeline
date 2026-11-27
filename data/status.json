@@ -441,6 +441,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-26T17:56:57.840337+01:00"
+  },
+  "2026-11-27 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45940364882",
+   "message_id": 667,
+   "titel": "140 Leute teilen einen Tisch",
+   "thema": "Thanksgiving",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-27T05:41:00.295627+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICmmsJCdsbRurkpD5mljEv9teT1LRnAALuIAAC13BJUHAzYj_-8Wt_PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
