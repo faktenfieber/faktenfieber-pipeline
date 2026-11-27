@@ -3151,5 +3151,30 @@
   "run_id": "45966234841",
   "dauer": 60.9,
   "stats": {}
+ },
+ {
+  "slot": "2026-11-27 18:00",
+  "gepostet": "2026-11-27T17:56:59.756241+01:00",
+  "titel": "Warum wurde der Kellner im Garten gefesselt?",
+  "thema": "Steirerstich",
+  "hook_stil": "Frage",
+  "stimme": "Charon",
+  "quelle": "trend",
+  "folge": 108,
+  "fan": null,
+  "frage": "Hättest du die Mutter vermutet?",
+  "catch": 8,
+  "faden": 4,
+  "serie": null,
+  "schwierigkeit": 6.7,
+  "modus": "fakt",
+  "text": "Gefesselt im Garten: Wer hat den Kellner gefesselt? Steirerstich ist ein Krimi aus 2025. Ein Koch wird in seiner Küche erstochen. Die Polizei ermittelt im Ort Golling. Der Koch hatte Geld von mehreren Personen geliehen. Der Kellner hat kein Alibi und ist Verdächtiger. Plötzlich verschwindet der Kellner. Man findet ihn später im Haus, ans Bett gefesselt. Er wollte damit Ingrid erpressen. Im Garten liegt das Mordmesser, vergraben im Boden. Eine 16‑jährige Schülerin vergrub das Messer. Sie tat das, um ihre Mutter zu schützen. Die Mutter hat den Koch getötet. Der Kellner war gefesselt, weil er erpresste.",
+  "stunde": "18",
+  "ig": null,
+  "yt": "ipRZDnSXGag",
+  "ig_link": null,
+  "run_id": "46016581799",
+  "dauer": 46.5,
+  "stats": {}
  }
 ]
