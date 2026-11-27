@@ -71,11 +71,8 @@
   "ig_link": null,
   "run_id": null,
   "nachgetragen": true,
-  "stats": {
-   "yt_aufrufe": 562,
-   "yt_likes": 5
-  },
-  "punkte": 33.1,
+  "stats": {},
+  "punkte": 0.0,
   "stats_am": "2026-11-27T16:41:10.608726+01:00"
  },
  {
@@ -92,11 +89,8 @@
   "ig_link": null,
   "run_id": null,
   "nachgetragen": true,
-  "stats": {
-   "yt_aufrufe": 25,
-   "yt_likes": 1
-  },
-  "punkte": 2.2,
+  "stats": {},
+  "punkte": 0.0,
   "stats_am": "2026-11-27T16:41:10.608748+01:00"
  },
  {
@@ -113,11 +107,8 @@
   "ig_link": null,
   "run_id": null,
   "nachgetragen": true,
-  "stats": {
-   "yt_aufrufe": 17,
-   "yt_likes": 1
-  },
-  "punkte": 1.9,
+  "stats": {},
+  "punkte": 0.0,
   "stats_am": "2026-10-30T17:05:54.755897+01:00"
  },
  {
