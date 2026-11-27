@@ -441,6 +441,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-27T11:56:57.831573+01:00"
+  },
+  "2026-11-27 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "46016581799",
+   "message_id": 675,
+   "titel": "Warum wurde der Kellner im Garten gefesselt?",
+   "thema": "Steirerstich",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-27T15:37:37.207364+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAIComsJlbC41RZh2_c_hHXYbZQONSBDAAJxIQAC13BJUHizcCbwBiZZPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
