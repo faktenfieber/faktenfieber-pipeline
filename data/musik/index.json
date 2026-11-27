@@ -1,11 +1,4 @@
 {
- "7dd9db9ba03943339bf6aa76e727be.mp3": {
-  "nachweis": "„Musci ambient relax“ von empanada – CC BY-SA 3.0 – https://www.jamendo.com/track/678120",
-  "stimmung": "sanft",
-  "tags": "instrumental, speed_medium",
-  "ohne_stimme": true,
-  "ruhig_geprueft": true
- },
  "9e753e56aadf4fe78c43aa203d122a.mp3": {
   "nachweis": "„Deep Study of a Calm Mind“ von KonstantinPazuzuStudio – CC BY 3.0 – https://www.jamendo.com/track/2326401",
   "stimmung": "sanft",
@@ -171,6 +164,13 @@
   "nachweis": "„nuage“ von thomas saliba – CC BY 3.0 – https://www.jamendo.com/track/1241611",
   "stimmung": "sanft",
   "tags": "instrumental, speed_medium, piano, violin, calme",
+  "ohne_stimme": true,
+  "ruhig_geprueft": true
+ },
+ "10fa71f5a26944e2a93e93eb075e21.mp3": {
+  "nachweis": "„Sun and Friends“ von Ton in Ton – CC BY 3.0 – https://www.jamendo.com/track/1245192",
+  "stimmung": "sanft",
+  "tags": "female, instrumental, lounge, peaceful, piano, samples",
   "ohne_stimme": true,
   "ruhig_geprueft": true
  }

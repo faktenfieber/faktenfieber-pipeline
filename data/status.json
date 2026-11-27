@@ -441,6 +441,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-27T07:56:59.303165+01:00"
+  },
+  "2026-11-27 12:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "45966234841",
+   "message_id": 672,
+   "titel": "3 Taylors in einer Band ohne Blutsband",
+   "thema": "Duran Duran",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-27T09:37:09.511542+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICn2sJQTQpScZWlhnLFn6WczuNfIkgAAIJIQAC13BJUCi69LaT49yOPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
