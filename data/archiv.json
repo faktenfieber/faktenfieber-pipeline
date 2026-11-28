@@ -3201,5 +3201,30 @@
   "run_id": "46107879502",
   "dauer": 64.0,
   "stats": {}
+ },
+ {
+  "slot": "2026-11-28 12:00",
+  "gepostet": "2026-11-28T11:56:59.145778+01:00",
+  "titel": "Dieses Papierband ist stärker als dein PC",
+  "thema": "Turingmaschine",
+  "hook_stil": "Stell dir vor",
+  "stimme": "Charon",
+  "quelle": "ideen",
+  "folge": 110,
+  "fan": null,
+  "frage": "Was würdest du damit berechnen?",
+  "catch": 9,
+  "faden": 6,
+  "serie": null,
+  "schwierigkeit": 5.9,
+  "modus": "fakt",
+  "text": "Dieses Papierband kann jeden Computer nachbilden. Eine einzige Turingmaschine kann jeden Computer simulieren. 1936 erfand Alan Turing das Modell. Er nannte es damals die a‑Maschine. Das Band ist unendlich lang und in Felder geteilt. Jedes Feld speichert genau ein Zeichen. Ein Kopf liest, schreibt und bewegt sich. Nur drei Aktionen reichen, um Programme zu laufen. Deshalb ist das Modell sehr stark. Es ist aber viel langsamer als echte Chips. Echte Computer nutzen schnellen Speicher, nicht das Band. Turing zeigte, dass manche Probleme nie lösbar sind. Ein einfaches Band definiert die Grenzen der Berechnung.",
+  "stunde": "12",
+  "ig": null,
+  "yt": "AuOqJ_IKhns",
+  "ig_link": null,
+  "run_id": "46126153749",
+  "dauer": 49.8,
+  "stats": {}
  }
 ]
