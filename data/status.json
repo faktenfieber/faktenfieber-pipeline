@@ -441,6 +441,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-28T11:56:59.144956+01:00"
+  },
+  "2026-11-28 18:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "46150926905",
+   "message_id": 684,
+   "titel": "Der eisige Jäger mit nur 500 Artgenossen",
+   "thema": "Sibirischer Tiger",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-28T14:50:11.531479+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICq2sK3BLUgaN9xLZdxQOMNI4n1-6QAAKFHwACTuhRUHU7yjkHWKl6PQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
