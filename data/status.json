@@ -441,6 +441,21 @@
    },
    "ig_media_id": null,
    "gepostet_um": "2026-11-27T17:56:59.755659+01:00"
+  },
+  "2026-11-28 08:00": {
+   "status": "freigegeben",
+   "auto": true,
+   "run_id": "46107879502",
+   "message_id": 678,
+   "titel": "Area 51 Water Ride UFO‑Illusionen",
+   "thema": "Area 51 – Top Secret",
+   "extra": false,
+   "neu_gemacht": 0,
+   "erstellt": "2026-11-28T05:34:43.683259+01:00",
+   "wunsch": "",
+   "verworfen": [],
+   "tg_file": "BAACAgQAAxkDAAICpWsKWePcKhMn8DNE_nS5v0BHQTNWAAKPIAAC13BRUObCKwzeMZLdPQQ",
+   "modus": "fakt"
   }
  },
  "ig_token_erneuert": "2026-11-17T17:26:13.842526+01:00",
